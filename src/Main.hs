@@ -15,6 +15,8 @@
 module Main where
 
 import Control.Exception.Base
+import Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
@@ -112,7 +114,7 @@ list makeRequest = withPage 1 $ do
     let contents = envelopeContents envelope
     if pageCount <= 1
         then return contents
-        else combinePages [2..pageCount] >>= \nextContents -> return (contents ++ nextContents)
+        else combinePages [2..pageCount] >>= return . (contents ++) 
     where
         setPage :: Int -> Connection -> Connection
         setPage page (url, options) = (url, options <> ("page" =: page))
@@ -121,17 +123,15 @@ list makeRequest = withPage 1 $ do
         combinePages (p:ps) = withPage p $ do
             (url, options) <- ask
             envelope <- makeRequest
-            let contents = envelopeContents envelope
-            nextContents <- combinePages ps
-            return (contents ++ nextContents)
+            liftM ((envelopeContents envelope) ++) (combinePages ps)
 
-first :: (FromJSON a) => MAS (Envelope a) -> MAS (Maybe a)
+first :: (FromJSON a, MonadFail m) => MAS (Envelope a) -> MAS (m a)
 first makeRequest = do
     envelope <- makeRequest
     let contents = envelopeContents envelope
     if (length contents) == 0
-        then return Nothing
-        else return $ Just (contents !! 0)
+        then return $ Fail.fail "NOT FOUND" 
+        else return $ return (contents !! 0)
 
 withPageSize :: (MonadReader Connection m) => Int -> m a -> m a
 withPageSize pageSize = (local setPageSize)
