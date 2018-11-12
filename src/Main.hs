@@ -215,7 +215,7 @@ scheduleInvocation process dateInvoke = liftM fromJust $ first $ withInvocationE
 
 main :: IO ()
 main = do
-    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "postgres", serverPassword = "Bl4ckC4t" }
+    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "foo", serverPassword = "ba" }
     withServer server $ do
         t@UTCTime{utctDay=day} <- liftIO getCurrentTime
         let period = 90
