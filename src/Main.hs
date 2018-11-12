@@ -1,0 +1,230 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+module Main where
+
+import Control.Exception.Base
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Data.Aeson
+import Data.Aeson.Types (Parser)
+import Data.Default.Class
+import Data.ByteString (ByteString)
+import Data.List (intercalate)
+import Data.Maybe (fromJust)
+import Data.Proxy (Proxy)
+import Data.Text (Text, pack)
+import Data.Time
+import Data.Typeable
+import Data.UUID
+import Network.HTTP.Req
+import Text.Read hiding (get)
+
+data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
+type Connection = (Url 'Https, Option Https)
+
+newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Monad, MonadIO)
+
+instance MonadReader Connection MAS where
+    ask = MAS ask
+    local t (MAS m) = do 
+        connection <- ask
+        liftIO $ runReaderT m (t connection)
+
+instance MonadHttp MAS where
+    handleHttpException = liftIO . throwIO
+
+withServer :: (MonadIO m) => Server -> MAS a -> m a
+withServer server (MAS m) = do
+    let accept = header "Accept" "application/json"
+    let auth = basicAuth (serverUser server) (serverPassword server)
+    let defaultPageSize = ("page_size" =: (3500 :: Int))
+    liftIO $ runReaderT m (serverUrl server, (accept <> auth <> defaultPageSize))
+
+data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } 
+
+instance (FromJSON a) => FromJSON (Envelope a) where
+    parseJSON = withObject "envelope" $ \envelope -> do
+        data' <- envelope .: "data" 
+        recordField <- data' .: "record_field"
+        envelopeContents <- data' .:? recordField .!= []
+        envelopePageCount <- data' .:? "page_count" .!= 1
+        envelopePage <- data' .:? "page" .!= 1
+        return $ Envelope {..} 
+
+data Process = Process { processName :: Text }
+
+instance FromJSON Process where
+    parseJSON = withObject "process" $ \process -> do
+        processName <- process .: "name"
+        return Process{..}
+
+data InvocationStatus = UNKNOWN | SUCCEEDED | FAILED | ABORTED | EXECUTING | SCHEDULED deriving (Enum, Eq, Ord, Show, Read)
+
+instance FromJSON InvocationStatus where
+    parseJSON value = do 
+        s <- parseJSON value
+        case readMaybe s of
+            Nothing -> return UNKNOWN 
+            Just status -> return status
+
+data Invocation = Invocation { invocationUUID :: UUID, invocationStatus :: InvocationStatus, invocationProcess :: String, invocationDateInvoked :: UTCTime } deriving (Show)
+
+instance FromJSON Invocation where
+    parseJSON = withObject "invocation" $ \invocation -> do
+        invocationUUID <- invocation .: "uuid"
+        invocationStatus <- invocation .: "status"
+        invocationProcess <- invocation .: "process"
+        s <- invocation .: "date_invoke"
+        let invocationDateInvoked = fromJust (parseTimeM False defaultTimeLocale (iso8601DateFormat (Just "%H:%M:%S")) s :: Maybe UTCTime)
+        return Invocation{..}
+
+data InvocationOutput = InvocationTextOutput InvocationStatus Text | InvocationProgressOutput InvocationStatus Float | InvocationUnknownOutput InvocationStatus deriving (Show) 
+
+instance FromJSON InvocationOutput where
+    parseJSON = withObject "output" $ \output -> do
+        status <- output .: "status"
+        data' <- output .: "data"
+        text <- data' .:? "text"
+        case text of
+            Just text -> return $ InvocationTextOutput status text
+            _ -> do
+                progress <- data' .:? "progress"
+                case progress of
+                    Just progress -> return $ InvocationProgressOutput status progress
+                    _ -> return $ InvocationUnknownOutput status
+
+list :: (FromJSON a) => MAS (Envelope a) -> MAS [a] 
+list makeRequest = withPage 1 $ do
+    envelope <- makeRequest 
+    let pageCount = envelopePageCount envelope
+    let contents = envelopeContents envelope
+    if pageCount <= 1
+        then return contents
+        else combinePages [2..pageCount] >>= \nextContents -> return (contents ++ nextContents)
+    where
+        setPage :: Int -> Connection -> Connection
+        setPage page (url, options) = (url, options <> ("page" =: page))
+        withPage p = (local (setPage p))
+        combinePages [] = return []
+        combinePages (p:ps) = withPage p $ do
+            (url, options) <- ask
+            envelope <- makeRequest
+            let contents = envelopeContents envelope
+            nextContents <- combinePages ps
+            return (contents ++ nextContents)
+
+first :: (FromJSON a) => MAS (Envelope a) -> MAS (Maybe a)
+first makeRequest = do
+    envelope <- makeRequest
+    let contents = envelopeContents envelope
+    if (length contents) == 0
+        then return Nothing
+        else return $ Just (contents !! 0)
+
+withPageSize :: (MonadReader Connection m) => Int -> m a -> m a
+withPageSize pageSize = (local setPageSize)
+    where
+        setPageSize :: Connection -> Connection
+        setPageSize (url, options) = (url, options <> ("page_size" =: pageSize))
+
+withPath :: (MonadReader Connection m) => Text -> m a -> m a
+withPath path = (local setPath)
+    where
+        setPath (url, options) = (url /: path, options)
+
+withOption :: (MonadReader Connection m) => Option 'Https -> m a -> m a
+withOption option = (local setOption)
+    where
+        setOption (url, options) = (url, options <> option)
+
+withProcessEndpoint :: (MonadReader Connection m) => m a -> m a
+withProcessEndpoint = withPath "process"
+
+withInvocationEndpoint :: (MonadReader Connection m) => m a -> m a
+withInvocationEndpoint = withPath "invocation"
+
+identify :: (Show a, Typeable a) => a -> String
+identify a = case (cast a) of
+    Just s -> s
+    Nothing -> show a
+
+withIdentifiers identifiers m = if (length identifiers) > 0 then withPath (pack (intercalate "," (map identify identifiers))) m else m
+withIdentifier identifier = withIdentifiers [identifier]
+
+request :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
+request method body = do
+    (url, options) <- ask
+    res <- req method url body jsonResponse options
+    return (responseBody res)
+        
+get :: (FromJSON a) => MAS a
+get = request GET NoReqBody
+
+post :: (ToJSON a, FromJSON b) => a -> MAS b
+post a = request POST (ReqBodyJson a)
+
+patch :: (ToJSON a, FromJSON b) => a -> MAS b
+patch a = request PATCH (ReqBodyJson a)
+
+put :: (ToJSON a, FromJSON b) => a -> MAS b
+put a = request PUT (ReqBodyJson a)
+
+listAll withContext identifiers = list $ withContext $ withIdentifiers identifiers get
+getFirst withContext identifier = liftM fromJust (withContext $ withIdentifier identifier get)
+
+authenticate :: MAS ()
+authenticate = withPath "authenticate" $ do 
+    (url, options) <- ask
+    req POST url NoReqBody ignoreResponse options >> return ()
+
+listProcesses :: [String] -> MAS [Process]
+listProcesses names = listAll withProcessEndpoint names 
+
+getProcess :: String -> MAS Process
+getProcess name = getFirst withProcessEndpoint name 
+
+listInvocations :: Day -> Integer -> [UUID] -> MAS [Invocation]
+listInvocations dateInvoke period uuids = do
+    let formattedDateInvoke = formatTime defaultTimeLocale "%Y-%m-%d" dateInvoke
+    let dateInvokeOption = "date_invoke" =: formattedDateInvoke
+    let periodOption = "period" =: period 
+    withOption (dateInvokeOption <> periodOption) (listAll withInvocationEndpoint uuids)
+
+listInvocationOutputs :: UUID -> MAS [InvocationOutput]
+listInvocationOutputs uuid = withInvocationEndpoint $ withIdentifier uuid $ withPath "display" $ list get
+
+data ScheduledInvocation = ScheduledInvocation String (Maybe UTCTime) deriving (Show)
+
+instance ToJSON ScheduledInvocation where
+    toJSON (ScheduledInvocation process dateInvoke) = object ["name" .= process, "date_invoke" .= dateInvoke]
+
+scheduleInvocation :: String -> Maybe UTCTime -> MAS Invocation 
+scheduleInvocation process dateInvoke = liftM fromJust $ first $ withInvocationEndpoint $ post $ ScheduledInvocation process dateInvoke 
+
+main :: IO ()
+main = do
+    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "postgres", serverPassword = "Bl4ckC4t" }
+    withServer server $ do
+        t@UTCTime{utctDay=day} <- liftIO getCurrentTime
+        let period = 90
+        let start = addDays (-1 * period) day
+        invocations <- listInvocations start period [] 
+        let invocation = invocations !! 0 
+        let uuid = invocationUUID invocation
+        outputs <- listInvocationOutputs uuid
+        liftIO $ forM_ outputs print
+        liftIO $ print (toJSON t)
+        scheduledInvocation <- scheduleInvocation "vendita.test_display" Nothing 
+        liftIO $ print scheduledInvocation
