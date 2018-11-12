@@ -35,11 +35,15 @@ module Vendita.MAS
     withPageSize,
     withPath,
     withOption,
+    withAccountEndpoint,
     withProcessEndpoint,
     withInvocationEndpoint,
     authenticate,
+    listAccounts,
+    listNamespaces,
     listProcesses,
     listInvocations,
+    listInvocationsFromDay,
     listInvocationsForPeriod,
     getInvocation,
     listInvocationOutputs,
@@ -130,6 +134,16 @@ instance FromJSON Invocation where
 
 data InvocationOutput = InvocationTextOutput InvocationStatus Text | InvocationProgressOutput InvocationStatus Float | InvocationUnknownOutput InvocationStatus deriving (Show) 
 
+data Account = Account { accountUUID :: UUID, accountAddress :: Text, accountProtocol :: Text, accountUser :: Text } deriving (Show)
+
+instance FromJSON Account where
+    parseJSON = withObject "account" $ \account -> do
+        accountUUID <- account .: "uuid"
+        accountAddress <- account .: "address"
+        accountProtocol <- account .: "protocol"
+        accountUser <- account .: "user"
+        return Account{..}
+
 instance FromJSON InvocationOutput where
     parseJSON = withObject "output" $ \output -> do
         status <- output .: "status"
@@ -142,6 +156,13 @@ instance FromJSON InvocationOutput where
                 case progress of
                     Just progress -> return $ InvocationProgressOutput status progress
                     _ -> return $ InvocationUnknownOutput status
+
+data Namespace = Namespace { namespaceName :: String } deriving (Show)
+
+instance FromJSON Namespace where
+    parseJSON = withObject "namespace" $ \nspace -> do
+        namespaceName <- nspace .: "name"
+        return Namespace{..}
 
 list :: (FromJSON a) => MAS (Envelope a) -> MAS [a] 
 list makeRequest = withPage 1 $ do
@@ -225,27 +246,45 @@ authenticate = withPath "authenticate" $ do
     (url, options) <- ask
     req POST url NoReqBody ignoreResponse options >> return ()
 
+withAccountEndpoint :: (MonadReader Connection m) => m a -> m a
+withAccountEndpoint = withPath "credential"
+
+withNamespaceEndpoint :: (MonadReader Connection m) => m a -> m a
+withNamespaceEndpoint = withPath "namespace"
+
+listAccounts :: [UUID] -> MAS [Account]
+listAccounts = listAll withAccountEndpoint
+
+getAccount :: UUID -> MAS Account
+getAccount = justFirst withAccountEndpoint
+
+listNamespaces :: [String] -> MAS [Namespace]
+listNamespaces = listAll withNamespaceEndpoint
+
 listProcesses :: [String] -> MAS [Process]
-listProcesses names = listAll withProcessEndpoint names 
+listProcesses = listAll withProcessEndpoint
 
 getProcess :: String -> MAS Process
-getProcess name = justFirst withProcessEndpoint name 
+getProcess = justFirst withProcessEndpoint
 
-listInvocations :: Day -> Integer -> [UUID] -> MAS [Invocation]
-listInvocations dateInvoke period uuids = do
+listInvocations :: [UUID] -> MAS [Invocation]
+listInvocations = listAll withInvocationEndpoint
+
+listInvocationsFromDay :: Day -> Integer -> [UUID] -> MAS [Invocation]
+listInvocationsFromDay dateInvoke period uuids = do
     let formattedDateInvoke = formatTime defaultTimeLocale "%Y-%m-%d" dateInvoke
     let dateInvokeOption = "date_invoke" =: formattedDateInvoke
     let periodOption = "period" =: period 
-    withOption (dateInvokeOption <> periodOption) (listAll withInvocationEndpoint uuids)
+    withOption (dateInvokeOption <> periodOption) (listInvocations uuids) 
 
 listInvocationsForPeriod :: Integer -> [UUID] -> MAS [Invocation]
 listInvocationsForPeriod period uuids = do
     UTCTime{utctDay=day} <- liftIO getCurrentTime
     let daysAgo = addDays (-1 * period) day
-    listInvocations daysAgo period uuids
+    listInvocationsFromDay daysAgo period uuids
 
 getInvocation :: UUID -> MAS Invocation
-getInvocation uuid = justFirst withInvocationEndpoint uuid
+getInvocation = justFirst withInvocationEndpoint
 
 listInvocationOutputs :: UUID -> MAS [InvocationOutput]
 listInvocationOutputs uuid = withInvocationEndpoint $ withIdentifier uuid $ withPath "display" $ list get
