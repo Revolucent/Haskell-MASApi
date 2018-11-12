@@ -31,8 +31,10 @@ import Data.Text (Text, pack)
 import Data.Time
 import Data.Typeable
 import Data.UUID
+import GHC.Exts (fromList)
 import Network.HTTP.Req
 import Text.Read hiding (get)
+import qualified Vendita.MAS.Config.Test as Config
 
 data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
 type Connection = (Url 'Https, Option Https)
@@ -164,26 +166,26 @@ identify a = case (cast a) of
 withIdentifiers identifiers m = if (length identifiers) > 0 then withPath (pack (intercalate "," (map identify identifiers))) m else m
 withIdentifier identifier = withIdentifiers [identifier]
 
-request :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
-request method body = do
+mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
+mas method body = do
     (url, options) <- ask
     res <- req method url body jsonResponse options
     return (responseBody res)
         
 get :: (FromJSON a) => MAS a
-get = request GET NoReqBody
+get = mas GET NoReqBody
 
 post :: (ToJSON a, FromJSON b) => a -> MAS b
-post a = request POST (ReqBodyJson a)
+post a = mas POST (ReqBodyJson a)
 
 patch :: (ToJSON a, FromJSON b) => a -> MAS b
-patch a = request PATCH (ReqBodyJson a)
+patch a = mas PATCH (ReqBodyJson a)
 
 put :: (ToJSON a, FromJSON b) => a -> MAS b
-put a = request PUT (ReqBodyJson a)
+put a = mas PUT (ReqBodyJson a)
 
 listAll withContext identifiers = list $ withContext $ withIdentifiers identifiers get
-getFirst withContext identifier = liftM fromJust (withContext $ withIdentifier identifier get)
+justFirst withContext identifier = liftM fromJust (withContext $ withIdentifier identifier get)
 
 authenticate :: MAS ()
 authenticate = withPath "authenticate" $ do 
@@ -194,7 +196,7 @@ listProcesses :: [String] -> MAS [Process]
 listProcesses names = listAll withProcessEndpoint names 
 
 getProcess :: String -> MAS Process
-getProcess name = getFirst withProcessEndpoint name 
+getProcess name = justFirst withProcessEndpoint name 
 
 listInvocations :: Day -> Integer -> [UUID] -> MAS [Invocation]
 listInvocations dateInvoke period uuids = do
@@ -210,17 +212,17 @@ listInvocationsForPeriod period uuids = do
     listInvocations daysAgo period uuids
 
 getInvocation :: UUID -> MAS Invocation
-getInvocation uuid = getFirst withInvocationEndpoint uuid
+getInvocation uuid = justFirst withInvocationEndpoint uuid
 
 listInvocationOutputs :: UUID -> MAS [InvocationOutput]
 listInvocationOutputs uuid = withInvocationEndpoint $ withIdentifier uuid $ withPath "display" $ list get
 
-data ScheduledInvocation = ScheduledInvocation String (Maybe UTCTime) deriving (Show)
+data ScheduledInvocation = ScheduledInvocation String (Maybe UTCTime) Value deriving (Show)
 
 scheduledInvocationNow process = ScheduledInvocation process Nothing
 
 instance ToJSON ScheduledInvocation where
-    toJSON (ScheduledInvocation process dateInvoke) = object ["name" .= process, "date_invoke" .= dateInvoke]
+    toJSON (ScheduledInvocation process dateInvoke parameters) = object ["name" .= process, "date_invoke" .= dateInvoke, "parameters" .= parameters]
 
 scheduleInvocation :: ScheduledInvocation -> MAS Invocation
 scheduleInvocation scheduledInvocation = liftM fromJust $ first $ withInvocationEndpoint $ post scheduledInvocation 
@@ -234,12 +236,12 @@ refreshInvocation i@Invocation{invocationStatus=status}
 
 main :: IO ()
 main = do
-    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "", serverPassword = "" }
+    let server = Server { serverUrl = https Config.serverHost /: "mas", serverUser = Config.serverUser, serverPassword = Config.serverPassword }
     withServer server $ do
         invocations <- listInvocationsForPeriod 90 [] 
         let invocation = invocations !! 0 
         let uuid = invocationUUID invocation
         outputs <- listInvocationOutputs uuid
         liftIO $ forM_ outputs print
-        scheduledInvocation <- scheduleInvocation (scheduledInvocationNow "vendita.test_display") 
+        scheduledInvocation <- scheduleInvocation (scheduledInvocationNow "vendita.test_display" (Object $ fromList []))
         liftIO $ print scheduledInvocation
