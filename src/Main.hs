@@ -14,6 +14,7 @@
 
 module Main where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception.Base
 import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
@@ -202,29 +203,43 @@ listInvocations dateInvoke period uuids = do
     let periodOption = "period" =: period 
     withOption (dateInvokeOption <> periodOption) (listAll withInvocationEndpoint uuids)
 
+listInvocationsForPeriod :: Integer -> [UUID] -> MAS [Invocation]
+listInvocationsForPeriod period uuids = do
+    UTCTime{utctDay=day} <- liftIO getCurrentTime
+    let daysAgo = addDays (-1 * period) day
+    listInvocations daysAgo period uuids
+
+getInvocation :: UUID -> MAS Invocation
+getInvocation uuid = getFirst withInvocationEndpoint uuid
+
 listInvocationOutputs :: UUID -> MAS [InvocationOutput]
 listInvocationOutputs uuid = withInvocationEndpoint $ withIdentifier uuid $ withPath "display" $ list get
 
 data ScheduledInvocation = ScheduledInvocation String (Maybe UTCTime) deriving (Show)
 
+scheduledInvocationNow process = ScheduledInvocation process Nothing
+
 instance ToJSON ScheduledInvocation where
     toJSON (ScheduledInvocation process dateInvoke) = object ["name" .= process, "date_invoke" .= dateInvoke]
 
-scheduleInvocation :: String -> Maybe UTCTime -> MAS Invocation 
-scheduleInvocation process dateInvoke = liftM fromJust $ first $ withInvocationEndpoint $ post $ ScheduledInvocation process dateInvoke 
+scheduleInvocation :: ScheduledInvocation -> MAS Invocation
+scheduleInvocation scheduledInvocation = liftM fromJust $ first $ withInvocationEndpoint $ post scheduledInvocation 
+
+refreshInvocation :: Invocation -> MAS Invocation
+refreshInvocation i@Invocation{invocationStatus=status}
+    | (status == EXECUTING) || (status == SCHEDULED) = do
+        liftIO $ threadDelay 1000000
+        getInvocation (invocationUUID i) >>= refreshInvocation
+    | otherwise = return i
 
 main :: IO ()
 main = do
-    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "foo", serverPassword = "ba" }
+    let server = Server { serverUrl = https "mascloud3.venditabeta.com" /: "mas", serverUser = "", serverPassword = "" }
     withServer server $ do
-        t@UTCTime{utctDay=day} <- liftIO getCurrentTime
-        let period = 90
-        let start = addDays (-1 * period) day
-        invocations <- listInvocations start period [] 
+        invocations <- listInvocationsForPeriod 90 [] 
         let invocation = invocations !! 0 
         let uuid = invocationUUID invocation
         outputs <- listInvocationOutputs uuid
         liftIO $ forM_ outputs print
-        liftIO $ print (toJSON t)
-        scheduledInvocation <- scheduleInvocation "vendita.test_display" Nothing 
+        scheduledInvocation <- scheduleInvocation (scheduledInvocationNow "vendita.test_display") 
         liftIO $ print scheduledInvocation
