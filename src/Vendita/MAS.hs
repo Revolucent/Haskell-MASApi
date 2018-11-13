@@ -40,6 +40,8 @@ module Vendita.MAS
     withInvocationEndpoint,
     authenticate,
     listAccounts,
+    listForms,
+    getForm,
     listNamespaces,
     listProcesses,
     listInvocations,
@@ -80,9 +82,7 @@ newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Mo
 
 instance MonadReader Connection MAS where
     ask = MAS ask
-    local t (MAS m) = do 
-        connection <- ask
-        liftIO $ runReaderT m (t connection)
+    local t (MAS m) = fmap t ask >>= liftIO . runReaderT m 
 
 instance MonadHttp MAS where
     handleHttpException = liftIO . throwIO
@@ -179,7 +179,7 @@ list makeRequest = withPage 1 $ do
         combinePages [] = return []
         combinePages (p:ps) = withPage p $ do
             envelope <- makeRequest
-            liftM ((envelopeContents envelope) ++) (combinePages ps)
+            fmap ((envelopeContents envelope) ++) (combinePages ps)
 
 first :: (FromJSON a, MonadFail m) => MAS (Envelope a) -> MAS (m a)
 first makeRequest = do
@@ -204,6 +204,9 @@ withOption :: (MonadReader Connection m) => Option 'Https -> m a -> m a
 withOption option = (local setOption)
     where
         setOption (url, options) = (url, options <> option)
+
+withFormEndpoint :: (MonadReader Connection m) => m a -> m a
+withFormEndpoint = withPath "form"
 
 withProcessEndpoint :: (MonadReader Connection m) => m a -> m a
 withProcessEndpoint = withPath "process"
@@ -238,7 +241,7 @@ put :: (ToJSON a, FromJSON b) => a -> MAS b
 put a = mas PUT (ReqBodyJson a)
 
 listAll withContext identifiers = list $ withContext $ withIdentifiers identifiers get
-justFirst withContext identifier = liftM fromJust (withContext $ withIdentifier identifier get)
+justFirst withContext identifier = fmap fromJust (withContext $ withIdentifier identifier get)
 
 authenticate :: MAS ()
 authenticate = withPath "authenticate" $ do 
@@ -256,6 +259,12 @@ listAccounts = listAll withAccountEndpoint
 
 getAccount :: UUID -> MAS Account
 getAccount = justFirst withAccountEndpoint
+
+listForms :: [UUID] -> MAS [Value]
+listForms = listAll withFormEndpoint
+
+getForm :: UUID -> MAS Value
+getForm = justFirst withAccountEndpoint
 
 listNamespaces :: [String] -> MAS [Namespace]
 listNamespaces = listAll withNamespaceEndpoint
@@ -296,4 +305,4 @@ instance ToJSON ScheduledInvocation where
     toJSON (ScheduledInvocation process dateInvoke parameters) = object ["name" .= process, "date_invoke" .= dateInvoke, "parameters" .= parameters]
 
 scheduleInvocation :: ScheduledInvocation -> MAS Invocation
-scheduleInvocation scheduledInvocation = liftM fromJust $ first $ withInvocationEndpoint $ post scheduledInvocation 
+scheduleInvocation scheduledInvocation = fmap fromJust $ first $ withInvocationEndpoint $ post scheduledInvocation 

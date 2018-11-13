@@ -12,5 +12,5 @@ main :: IO ()
 main = do 
     let server = Server { serverUrl = (https Config.serverHost) /: "mas", serverUser = Config.serverUser, serverPassword = Config.serverPassword }
     withServer server $ do
-        namespaces <- listNamespaces [] 
-        liftIO $ forM_ namespaces print
+        forms <- listForms []
+        liftIO $ forM_ forms print
