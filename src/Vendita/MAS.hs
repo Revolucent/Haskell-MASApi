@@ -178,7 +178,6 @@ list makeRequest = withPage 1 $ do
         withPage p = (local (setPage p))
         combinePages [] = return []
         combinePages (p:ps) = withPage p $ do
-            (url, options) <- ask
             envelope <- makeRequest
             liftM ((envelopeContents envelope) ++) (combinePages ps)
 
