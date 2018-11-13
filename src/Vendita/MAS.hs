@@ -91,7 +91,7 @@ withServer :: (MonadIO m) => Server -> MAS a -> m a
 withServer server (MAS m) = do
     let accept = header "Accept" "application/json"
     let auth = basicAuth (serverUser server) (serverPassword server)
-    let defaultPageSize = ("page_size" =: (3500 :: Int))
+    let defaultPageSize = "page_size" =: (3500 :: Int)
     liftIO $ runReaderT m (serverUrl server, (accept <> auth <> defaultPageSize))
 
 data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } 
@@ -103,7 +103,7 @@ instance (FromJSON a) => FromJSON (Envelope a) where
         envelopeContents <- data' .:? recordField .!= []
         envelopePageCount <- data' .:? "page_count" .!= 1
         envelopePage <- data' .:? "page" .!= 1
-        return $ Envelope {..} 
+        return Envelope{..} 
 
 data Process = Process { processName :: Text }
 
@@ -164,7 +164,7 @@ instance FromJSON Namespace where
         namespaceName <- nspace .: "name"
         return Namespace{..}
 
-list :: (FromJSON a) => MAS (Envelope a) -> MAS [a] 
+list :: (MonadReader Connection m) => m (Envelope a) -> m [a]
 list makeRequest = withPage 1 $ do
     envelope <- makeRequest 
     let pageCount = envelopePageCount envelope
@@ -175,13 +175,13 @@ list makeRequest = withPage 1 $ do
     where
         setPage :: Int -> Connection -> Connection
         setPage page (url, options) = (url, options <> ("page" =: page))
-        withPage p = (local (setPage p))
+        withPage p = local (setPage p)
         combinePages [] = return []
         combinePages (p:ps) = withPage p $ do
             envelope <- makeRequest
             fmap ((envelopeContents envelope) ++) (combinePages ps)
 
-first :: (FromJSON a, MonadFail m) => MAS (Envelope a) -> MAS (m a)
+first :: (Monad m, MonadFail f) => m (Envelope a) -> m (f a)
 first makeRequest = do
     envelope <- makeRequest
     let contents = envelopeContents envelope
@@ -190,18 +190,18 @@ first makeRequest = do
         else return $ return (contents !! 0)
 
 withPageSize :: (MonadReader Connection m) => Int -> m a -> m a
-withPageSize pageSize = (local setPageSize)
+withPageSize pageSize = local setPageSize
     where
         setPageSize :: Connection -> Connection
         setPageSize (url, options) = (url, options <> ("page_size" =: pageSize))
 
 withPath :: (MonadReader Connection m) => Text -> m a -> m a
-withPath path = (local setPath)
+withPath path = local setPath
     where
         setPath (url, options) = (url /: path, options)
 
 withOption :: (MonadReader Connection m) => Option 'Https -> m a -> m a
-withOption option = (local setOption)
+withOption option = local setOption
     where
         setOption (url, options) = (url, options <> option)
 
@@ -225,8 +225,7 @@ withIdentifier identifier = withIdentifiers [identifier]
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do
     (url, options) <- ask
-    res <- req method url body jsonResponse options
-    return (responseBody res)
+    req method url body jsonResponse options >>= return . responseBody
         
 get :: (FromJSON a) => MAS a
 get = mas GET NoReqBody
