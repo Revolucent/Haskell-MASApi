@@ -240,8 +240,8 @@ patch a = mas PATCH (ReqBodyJson a)
 put :: (ToJSON a, FromJSON b) => a -> MAS b
 put a = mas PUT (ReqBodyJson a)
 
-listAll withContext identifiers = list $ withContext $ withIdentifiers identifiers get
-justFirst withContext identifier = fmap fromJust (withContext $ withIdentifier identifier get)
+listAll withContext = list . withContext . (flip withIdentifiers) get
+justFirst withContext = fmap fromJust . withContext . (flip withIdentifier) get
 
 authenticate :: MAS ()
 authenticate = withPath "authenticate" $ do 
