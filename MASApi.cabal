@@ -2,7 +2,7 @@
 -- see http://haskell.org/cabal/users-guide/
 
 -- The name of the package.
-name:                Foo
+name:                vendita-masapi 
 
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
@@ -25,11 +25,11 @@ license:             MIT
 license-file:        LICENSE
 
 -- The package author(s).
-author:              Gregory Higley
+author:              Vendita Technologies, Inc. 
 
 -- An email address to which users can send suggestions, bug reports, and
 -- patches.
-maintainer:          code@revolucent.net
+maintainer:          greg.higley@vendita.com 
 
 -- A copyright notice.
 -- copyright:
@@ -45,23 +45,20 @@ extra-source-files:  CHANGELOG.md
 -- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10
 
+source-repository     head
+  type:               git
+  location:           https://github.com/VenditaMAS/Haskell-MASApi
 
-executable Foo
-  -- .hs or .lhs file containing the Main module.
+library
+  hs-source-dirs:     src/lib
+  build-depends:      base >=4.11 && <4.12, req, aeson, bytestring, network-uri, data-default-class, monad-control, mtl, text, uuid, time, unordered-containers 
+  exposed-modules:    Vendita.MAS
+  default-language:   Haskell2010
+
+executable MAS 
   main-is:             Main.hs
-
-  -- Modules included in this executable, other than Main.
-  other-modules: Vendita.MAS, Vendita.MAS.Config.Test
-
-  -- LANGUAGE extensions used by modules in this package.
-  -- other-extensions:
-
-  -- Other library packages from which modules are imported.
-  build-depends:       base >=4.11 && <4.12, req, aeson, bytestring, network-uri, data-default-class, monad-control, mtl, text, uuid, time, unordered-containers 
-
-  -- Directories containing source files.
-  hs-source-dirs:      src
-
-  -- Base language which the package is written in.
+  other-modules:       Config
+  build-depends:       base >=4.11 && <4.12, req, vendita-masapi, bytestring, text
+  hs-source-dirs:      src/bin
   default-language:    Haskell2010
 

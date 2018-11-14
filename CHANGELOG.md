@@ -1,4 +1,4 @@
-# Revision history for Foo
+# Revision history for MASApi 
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

@@ -243,7 +243,7 @@ listAll withContext = list . withContext . (flip withIdentifiers) get
 justFirst withContext = fmap fromJust . withContext . (flip withIdentifier) get
 
 authenticate :: MAS ()
-authenticate = withPath "authenticate" $ do 
+authenticate = do
     (url, options) <- ask
     req POST url NoReqBody ignoreResponse options >> return ()
 
