@@ -15,6 +15,4 @@ import Config
 main :: IO ()
 main = do 
     let server = Server { MAS.serverUrl = (https Config.serverHost) /: "mas", MAS.serverUser = Config.serverUser, MAS.serverPassword = Config.serverPassword }
-    withServer server $ do
-        forms <- listForms []
-        liftIO $ forM_ forms print
+    return ()

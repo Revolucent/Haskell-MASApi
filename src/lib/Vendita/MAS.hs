@@ -9,6 +9,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -19,43 +20,40 @@ module Vendita.MAS
     MAS,
     withServer,
     Envelope (..),
-    Process (..),
-    Invocation (..),
-    InvocationStatus (..),
-    InvocationOutput (..),
+    io,
+    catch,
+    handleHttpStatus,
+    ok,
     list,
     first,
     mas,
+    mas_,
     get,
+    get_,
     post,
+    post_,
     patch,
+    patch_,
     put,
-    listAll,
-    justFirst,
+    put_,
     withPageSize,
     withPath,
     withOption,
-    withAccountEndpoint,
-    withProcessEndpoint,
-    withInvocationEndpoint,
-    authenticate,
-    listAccounts,
-    listForms,
-    getForm,
+    Namespace (..),
+    withNamespaceEndpoint,
     listNamespaces,
-    listProcesses,
-    listInvocations,
-    listInvocationsFromDay,
-    listInvocationsForPeriod,
-    getInvocation,
-    listInvocationOutputs,
-    scheduledInvocationNow,
-    scheduleInvocation
+    getNamespace,
+    createNamespace,
+    createNamespace_,
+    updateNamespace,
+    updateNamespace_,
+    deleteNamespaces
 )
 where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception.Base
+import Control.Exception.Base (Exception, throwIO)
+import qualified Control.Exception.Base as E
 import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
@@ -65,6 +63,8 @@ import Data.Aeson.Types (Parser)
 import Data.Default.Class
 import Data.ByteString (ByteString)
 import Data.List (intercalate)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Proxy (Proxy)
 import Data.Text (Text, pack)
@@ -72,6 +72,8 @@ import Data.Time
 import Data.Typeable
 import Data.UUID
 import GHC.Exts (fromList)
+import qualified Network.HTTP.Client as C 
+import qualified Network.HTTP.Types as T
 import Network.HTTP.Req
 import Text.Read hiding (get)
 
@@ -82,7 +84,7 @@ newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Mo
 
 instance MonadReader Connection MAS where
     ask = MAS ask
-    local t (MAS m) = fmap t ask >>= liftIO . runReaderT m 
+    local t (MAS m) = t <$> ask >>= liftIO . runReaderT m 
 
 instance MonadHttp MAS where
     handleHttpException = liftIO . throwIO
@@ -105,64 +107,27 @@ instance (FromJSON a) => FromJSON (Envelope a) where
         envelopePage <- data' .:? "page" .!= 1
         return Envelope{..} 
 
-data Process = Process { processName :: Text }
+io :: (MonadIO m, MonadReader Connection m) => MAS a -> (IO a -> IO b) -> m b
+io (MAS a) t = do 
+    env <- ask
+    liftIO $ t (runReaderT a env)
 
-instance FromJSON Process where
-    parseJSON = withObject "process" $ \process -> do
-        processName <- process .: "name"
-        return Process{..}
+catch :: (Exception e) => MAS a -> (e -> IO a) -> MAS a
+catch m handler = io m (`E.catch` handler)
 
-data InvocationStatus = UNKNOWN | SUCCEEDED | FAILED | ABORTED | EXECUTING | SCHEDULED deriving (Enum, Eq, Ord, Show, Read)
+handleHttpStatus :: (Foldable t) => t T.Status -> IO a -> HttpException -> IO a
+handleHttpStatus statuses action e@(VanillaHttpException (C.HttpExceptionRequest _ (C.StatusCodeException response _))) = do 
+    if elem (C.responseStatus response) statuses
+        then action
+        else throwIO e
+handleHttpStatus _ _ e = throwIO e 
 
-instance FromJSON InvocationStatus where
-    parseJSON value = do 
-        s <- parseJSON value
-        case readMaybe s of
-            Nothing -> return UNKNOWN 
-            Just status -> return status
+ok :: MAS a -> MAS Bool
+ok m = (m >> return True) `catch` (\(e :: HttpException) -> return False)
+data Form = Form { formUUID :: UUID, formName :: Text, formValues :: [Map String Value] } deriving (Show)
 
-data Invocation = Invocation { invocationUUID :: UUID, invocationStatus :: InvocationStatus, invocationProcess :: String, invocationDateInvoked :: UTCTime } deriving (Show)
-
-instance FromJSON Invocation where
-    parseJSON = withObject "invocation" $ \invocation -> do
-        invocationUUID <- invocation .: "uuid"
-        invocationStatus <- invocation .: "status"
-        invocationProcess <- invocation .: "process"
-        s <- invocation .: "date_invoke"
-        let invocationDateInvoked = fromJust (parseTimeM False defaultTimeLocale (iso8601DateFormat (Just "%H:%M:%S")) s :: Maybe UTCTime)
-        return Invocation{..}
-
-data InvocationOutput = InvocationTextOutput InvocationStatus Text | InvocationProgressOutput InvocationStatus Float | InvocationUnknownOutput InvocationStatus deriving (Show) 
-
-data Account = Account { accountUUID :: UUID, accountAddress :: Text, accountProtocol :: Text, accountUser :: Text } deriving (Show)
-
-instance FromJSON Account where
-    parseJSON = withObject "account" $ \account -> do
-        accountUUID <- account .: "uuid"
-        accountAddress <- account .: "address"
-        accountProtocol <- account .: "protocol"
-        accountUser <- account .: "user"
-        return Account{..}
-
-instance FromJSON InvocationOutput where
-    parseJSON = withObject "output" $ \output -> do
-        status <- output .: "status"
-        data' <- output .: "data"
-        text <- data' .:? "text"
-        case text of
-            Just text -> return $ InvocationTextOutput status text
-            _ -> do
-                progress <- data' .:? "progress"
-                case progress of
-                    Just progress -> return $ InvocationProgressOutput status progress
-                    _ -> return $ InvocationUnknownOutput status
-
-data Namespace = Namespace { namespaceName :: String } deriving (Show)
-
-instance FromJSON Namespace where
-    parseJSON = withObject "namespace" $ \nspace -> do
-        namespaceName <- nspace .: "name"
-        return Namespace{..}
+class Resource a where
+    type Identifier a
 
 list :: (MonadReader Connection m) => m (Envelope a) -> m [a]
 list makeRequest = withPage 1 $ do
@@ -179,15 +144,20 @@ list makeRequest = withPage 1 $ do
         combinePages [] = return []
         combinePages (p:ps) = withPage p $ do
             envelope <- makeRequest
-            fmap ((envelopeContents envelope) ++) (combinePages ps)
+            ((envelopeContents envelope) ++) <$> (combinePages ps)
 
-first :: (Monad m, MonadFail f) => m (Envelope a) -> m (f a)
-first makeRequest = do
-    envelope <- makeRequest
-    let contents = envelopeContents envelope
-    if (length contents) == 0
-        then return $ Fail.fail "NOT FOUND" 
-        else return $ return (contents !! 0)
+fail404 :: (MonadFail f) => f a
+fail404 = Fail.fail "NOT FOUND"
+
+first :: (MonadFail f) => MAS (Envelope a) -> MAS (f a)
+first makeRequest = openRequest `catch` (handleHttpStatus [T.status404] (return fail404)) 
+    where
+        openRequest = do
+            envelope <- makeRequest
+            let contents = envelopeContents envelope
+            if (length contents) == 0
+                then return fail404
+                else return $ return $ contents !! 0 
 
 withPageSize :: (MonadReader Connection m) => Int -> m a -> m a
 withPageSize pageSize = local setPageSize
@@ -205,15 +175,6 @@ withOption option = local setOption
     where
         setOption (url, options) = (url, options <> option)
 
-withFormEndpoint :: (MonadReader Connection m) => m a -> m a
-withFormEndpoint = withPath "form"
-
-withProcessEndpoint :: (MonadReader Connection m) => m a -> m a
-withProcessEndpoint = withPath "process"
-
-withInvocationEndpoint :: (MonadReader Connection m) => m a -> m a
-withInvocationEndpoint = withPath "invocation"
-
 identify :: (Show a, Typeable a) => a -> String
 identify a = case (cast a) of
     Just s -> s
@@ -222,86 +183,95 @@ identify a = case (cast a) of
 withIdentifiers identifiers m = if (length identifiers) > 0 then withPath (pack (intercalate "," (map identify identifiers))) m else m
 withIdentifier identifier = withIdentifiers [identifier]
 
+listWithIdentifiers :: (FromJSON a, Resource a, Show (Identifier a), Typeable (Identifier a)) => [Identifier a] -> MAS [a]
+listWithIdentifiers = list . (flip withIdentifiers) get
+
+firstWithIdentifier :: (MonadFail f, FromJSON a, Resource a, Show (Identifier a), Typeable (Identifier a)) => Identifier a -> MAS (f a) 
+firstWithIdentifier = first . (flip withIdentifier) get
+
+create :: (ToJSON a, FromJSON b) => a -> MAS b
+create = fmap fromJust . first . post
+
+update :: (ToJSON a, FromJSON b) => a -> MAS b
+update = fmap fromJust . first . patch
+
+deleteWithIdentifiers_ = (flip withIdentifiers) delete_
+
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do
     (url, options) <- ask
     req method url body jsonResponse options >>= return . responseBody
+
+mas_ :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS () 
+mas_ method body = do
+    (url, options) <- ask
+    req method url body ignoreResponse options >> return ()
         
 get :: (FromJSON a) => MAS a
 get = mas GET NoReqBody
 
+get_ :: MAS () 
+get_ = mas GET NoReqBody
+
+delete :: (FromJSON a) => MAS a
+delete = mas DELETE NoReqBody
+
+delete_ :: MAS ()
+delete_ = mas_ DELETE NoReqBody 
+
 post :: (ToJSON a, FromJSON b) => a -> MAS b
-post a = mas POST (ReqBodyJson a)
+post = mas POST . ReqBodyJson 
+
+post_ :: (ToJSON a) => a -> MAS () 
+post_ = mas_ POST . ReqBodyJson 
 
 patch :: (ToJSON a, FromJSON b) => a -> MAS b
-patch a = mas PATCH (ReqBodyJson a)
+patch = mas PATCH . ReqBodyJson 
+
+patch_ :: (ToJSON a) => a -> MAS () 
+patch_ = mas_ PATCH . ReqBodyJson 
 
 put :: (ToJSON a, FromJSON b) => a -> MAS b
-put a = mas PUT (ReqBodyJson a)
+put = mas PUT . ReqBodyJson 
 
-listAll withContext = list . withContext . (flip withIdentifiers) get
-justFirst withContext = fmap fromJust . withContext . (flip withIdentifier) get
+put_ :: (ToJSON a) => a -> MAS () 
+put_ = mas PUT . ReqBodyJson 
 
-authenticate :: MAS ()
-authenticate = do
-    (url, options) <- ask
-    req POST url NoReqBody ignoreResponse options >> return ()
+data Namespace = Namespace { namespaceName :: String, namespaceDescription :: String }
 
-withAccountEndpoint :: (MonadReader Connection m) => m a -> m a
-withAccountEndpoint = withPath "credential"
+instance Resource Namespace where
+    type Identifier Namespace = String
+
+instance FromJSON Namespace where
+    parseJSON = withObject "object" $ \obj -> do
+        namespaceName <- obj .: "name"
+        namespaceDescription <- obj .: "description"
+        return Namespace{..}
+
+instance ToJSON Namespace where
+    toJSON namespace = object [ "name" .= (namespaceName namespace), "description" .= (namespaceDescription namespace) ]
 
 withNamespaceEndpoint :: (MonadReader Connection m) => m a -> m a
 withNamespaceEndpoint = withPath "namespace"
 
-listAccounts :: [UUID] -> MAS [Account]
-listAccounts = listAll withAccountEndpoint
+listNamespaces :: [Identifier Namespace] -> MAS [Namespace]
+listNamespaces = withNamespaceEndpoint . listWithIdentifiers 
 
-getAccount :: UUID -> MAS Account
-getAccount = justFirst withAccountEndpoint
+getNamespace :: (MonadFail f) => Identifier Namespace -> MAS (f Namespace)
+getNamespace = withNamespaceEndpoint . firstWithIdentifier 
 
-listForms :: [UUID] -> MAS [Value]
-listForms = listAll withFormEndpoint
+deleteNamespaces :: [Identifier Namespace] -> MAS ()
+deleteNamespaces = withNamespaceEndpoint . deleteWithIdentifiers_ 
 
-getForm :: UUID -> MAS Value
-getForm = justFirst withAccountEndpoint
+createNamespace :: Namespace -> MAS Namespace 
+createNamespace = withNamespaceEndpoint . create 
 
-listNamespaces :: [String] -> MAS [Namespace]
-listNamespaces = listAll withNamespaceEndpoint
+createNamespace_ :: Namespace -> MAS ()
+createNamespace_ = withNamespaceEndpoint . post_ 
 
-listProcesses :: [String] -> MAS [Process]
-listProcesses = listAll withProcessEndpoint
+updateNamespace :: Namespace -> MAS Namespace
+updateNamespace = withNamespaceEndpoint . update
 
-getProcess :: String -> MAS Process
-getProcess = justFirst withProcessEndpoint
+updateNamespace_ :: Namespace -> MAS ()
+updateNamespace_ = withNamespaceEndpoint . patch_ 
 
-listInvocations :: [UUID] -> MAS [Invocation]
-listInvocations = listAll withInvocationEndpoint
-
-listInvocationsFromDay :: Day -> Integer -> [UUID] -> MAS [Invocation]
-listInvocationsFromDay dateInvoke period uuids = do
-    let formattedDateInvoke = formatTime defaultTimeLocale "%Y-%m-%d" dateInvoke
-    let dateInvokeOption = "date_invoke" =: formattedDateInvoke
-    let periodOption = "period" =: period 
-    withOption (dateInvokeOption <> periodOption) (listInvocations uuids) 
-
-listInvocationsForPeriod :: Integer -> [UUID] -> MAS [Invocation]
-listInvocationsForPeriod period uuids = do
-    UTCTime{utctDay=day} <- liftIO getCurrentTime
-    let daysAgo = addDays (-1 * period) day
-    listInvocationsFromDay daysAgo period uuids
-
-getInvocation :: UUID -> MAS Invocation
-getInvocation = justFirst withInvocationEndpoint
-
-listInvocationOutputs :: UUID -> MAS [InvocationOutput]
-listInvocationOutputs uuid = withInvocationEndpoint $ withIdentifier uuid $ withPath "display" $ list get
-
-data ScheduledInvocation = ScheduledInvocation String (Maybe UTCTime) Value deriving (Show)
-
-scheduledInvocationNow process = ScheduledInvocation process Nothing
-
-instance ToJSON ScheduledInvocation where
-    toJSON (ScheduledInvocation process dateInvoke parameters) = object ["name" .= process, "date_invoke" .= dateInvoke, "parameters" .= parameters]
-
-scheduleInvocation :: ScheduledInvocation -> MAS Invocation
-scheduleInvocation scheduledInvocation = fmap fromJust $ first $ withInvocationEndpoint $ post scheduledInvocation 
