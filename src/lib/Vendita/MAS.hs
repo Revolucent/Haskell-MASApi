@@ -18,12 +18,12 @@ module Vendita.MAS
     Server (..),
     Connection,
     MAS,
+    Resource (..),
     withServer,
     Envelope (..),
     io,
     catch,
     handleHttpStatus,
-    ok,
     list,
     first,
     mas,
@@ -36,9 +36,12 @@ module Vendita.MAS
     patch_,
     put,
     put_,
+    createIfNeeded,
     withPageSize,
     withPath,
     withOption,
+    withIdentifier,
+    withIdentifiers,
     Namespace (..),
     withNamespaceEndpoint,
     listNamespaces,
@@ -67,7 +70,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.Proxy (Proxy)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, isInfixOf, strip, unpack)
 import Data.Time
 import Data.Typeable
 import Data.UUID
@@ -96,7 +99,7 @@ withServer server (MAS m) = do
     let defaultPageSize = "page_size" =: (3500 :: Int)
     liftIO $ runReaderT m (serverUrl server, (accept <> auth <> defaultPageSize))
 
-data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } 
+data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } deriving (Show)
 
 instance (FromJSON a) => FromJSON (Envelope a) where
     parseJSON = withObject "envelope" $ \envelope -> do
@@ -107,10 +110,9 @@ instance (FromJSON a) => FromJSON (Envelope a) where
         envelopePage <- data' .:? "page" .!= 1
         return Envelope{..} 
 
-io :: (MonadIO m, MonadReader Connection m) => MAS a -> (IO a -> IO b) -> m b
-io (MAS a) t = do 
-    env <- ask
-    liftIO $ t (runReaderT a env)
+-- Run a MAS computation inside of the IO monad
+io :: MAS a -> (IO a -> IO b) -> MAS b
+io (MAS a) t = ask >>= liftIO . t . runReaderT a 
 
 catch :: (Exception e) => MAS a -> (e -> IO a) -> MAS a
 catch m handler = io m (`E.catch` handler)
@@ -122,12 +124,9 @@ handleHttpStatus statuses action e@(VanillaHttpException (C.HttpExceptionRequest
         else throwIO e
 handleHttpStatus _ _ e = throwIO e 
 
-ok :: MAS a -> MAS Bool
-ok m = (m >> return True) `catch` (\(e :: HttpException) -> return False)
-data Form = Form { formUUID :: UUID, formName :: Text, formValues :: [Map String Value] } deriving (Show)
-
 class Resource a where
     type Identifier a
+    resourceIdentifier :: a -> Identifier a
 
 list :: (MonadReader Connection m) => m (Envelope a) -> m [a]
 list makeRequest = withPage 1 $ do
@@ -136,7 +135,7 @@ list makeRequest = withPage 1 $ do
     let contents = envelopeContents envelope
     if pageCount <= 1
         then return contents
-        else combinePages [2..pageCount] >>= return . (contents ++) 
+        else (contents ++) <$> (combinePages [2..pageCount])
     where
         setPage :: Int -> Connection -> Connection
         setPage page (url, options) = (url, options <> ("page" =: page))
@@ -192,6 +191,13 @@ firstWithIdentifier = first . (flip withIdentifier) get
 create :: (ToJSON a, FromJSON b) => a -> MAS b
 create = fmap fromJust . first . post
 
+createIfNeeded :: (Resource r) => r -> (Identifier r -> MAS (Maybe r)) -> (r -> MAS r) -> MAS r
+createIfNeeded r getResource createResource = do
+    maybeResource <- getResource $ resourceIdentifier r
+    case maybeResource of
+        Just resource -> return resource
+        _ -> createResource r
+
 update :: (ToJSON a, FromJSON b) => a -> MAS b
 update = fmap fromJust . first . patch
 
@@ -200,7 +206,7 @@ deleteWithIdentifiers_ = (flip withIdentifiers) delete_
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do
     (url, options) <- ask
-    req method url body jsonResponse options >>= return . responseBody
+    fmap responseBody $ req method url body jsonResponse options
 
 mas_ :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS () 
 mas_ method body = do
@@ -235,12 +241,13 @@ put :: (ToJSON a, FromJSON b) => a -> MAS b
 put = mas PUT . ReqBodyJson 
 
 put_ :: (ToJSON a) => a -> MAS () 
-put_ = mas PUT . ReqBodyJson 
+put_ = mas PUT . ReqBodyJson
 
-data Namespace = Namespace { namespaceName :: String, namespaceDescription :: String }
+data Namespace = Namespace { namespaceName :: String, namespaceDescription :: String } deriving (Show)
 
 instance Resource Namespace where
     type Identifier Namespace = String
+    resourceIdentifier = namespaceName
 
 instance FromJSON Namespace where
     parseJSON = withObject "object" $ \obj -> do
