@@ -8,6 +8,7 @@ module Main where
 import Control.Applicative
 import Control.Conditional (whenM)
 import Control.Monad (forM_)
+import Control.Monad.Catch (catch)
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.IO.Class (liftIO) 
 import Control.Monad.Reader
@@ -24,16 +25,9 @@ what to do. Take a look at the first line of main below.
 -}
 import Config 
 
-examine :: MAS Value
-examine = ((!! 0) . envelopeContents) <$> get
-
-createRandomNamespaceName :: Maybe String -> IO String
-createRandomNamespaceName parent = do
-    uuid <- UUID.toString <$> randomIO
-    let name = "__masapi_test__" ++ (filter (/= '-') uuid)
-    return $ intercalate "." $ catMaybes [parent, Just name] 
+printOnHttpException = handleHttpException . print
 
 main :: IO ()
 main = do 
     let server = Server { MAS.serverUrl = (https Config.serverHost) /: "mas", MAS.serverUser = Config.serverUser, MAS.serverPassword = Config.serverPassword }
-    createRandomNamespaceName (Just "abc") >>= print
+    (withServer server $ withPath "foo" get_) `catch` (printOnHttpException "Damn!") 

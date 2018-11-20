@@ -21,9 +21,11 @@ module Vendita.MAS
     Resource (..),
     withServer,
     Envelope (..),
-    io,
-    catch,
     handleHttpStatus,
+    handleHttpException,
+    handleHttpExceptionJustReturn,
+    handleHttpStatusJustReturn,
+    handleHttp404JustReturn,
     list,
     first,
     mas,
@@ -57,6 +59,7 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Exception.Base (Exception, throwIO)
 import qualified Control.Exception.Base as E
+import Control.Monad.Catch
 import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
@@ -77,20 +80,21 @@ import Data.UUID
 import GHC.Exts (fromList)
 import qualified Network.HTTP.Client as C 
 import qualified Network.HTTP.Types as T
-import Network.HTTP.Req
+import Network.HTTP.Req hiding (handleHttpException)
+import qualified Network.HTTP.Req as Req 
 import Text.Read hiding (get)
 
 data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
 type Connection = (Url 'Https, Option Https)
 
-newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Monad, MonadIO)
+newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch)
 
 instance MonadReader Connection MAS where
     ask = MAS ask
     local t (MAS m) = t <$> ask >>= liftIO . runReaderT m 
 
 instance MonadHttp MAS where
-    handleHttpException = liftIO . throwIO
+    handleHttpException = throwM 
 
 withServer :: (MonadIO m) => Server -> MAS a -> m a
 withServer server (MAS m) = do
@@ -110,19 +114,28 @@ instance (FromJSON a) => FromJSON (Envelope a) where
         envelopePage <- data' .:? "page" .!= 1
         return Envelope{..} 
 
--- Run a MAS computation inside of the IO monad
-io :: MAS a -> (IO a -> IO b) -> MAS b
-io (MAS a) t = ask >>= liftIO . t . runReaderT a 
-
-catch :: (Exception e) => MAS a -> (e -> IO a) -> MAS a
-catch m handler = io m (`E.catch` handler)
-
-handleHttpStatus :: (Foldable t) => t T.Status -> IO a -> HttpException -> IO a
+handleHttpStatus :: (Foldable t, MonadThrow m) => t T.Status -> (T.Status -> m a) -> HttpException -> m a
 handleHttpStatus statuses action e@(VanillaHttpException (C.HttpExceptionRequest _ (C.StatusCodeException response _))) = do 
-    if elem (C.responseStatus response) statuses
-        then action
-        else throwIO e
-handleHttpStatus _ _ e = throwIO e 
+    let status = C.responseStatus response
+    if elem status statuses
+        then action status 
+        else throwM e 
+handleHttpStatus _ _ e = throwM e 
+
+handleHttpException :: (Monad m) => m a -> HttpException -> m a
+handleHttpException m _ = m
+
+handleHttpExceptionJustReturn :: (Monad m) => a -> HttpException -> m a 
+handleHttpExceptionJustReturn = handleHttpException . return 
+
+handleHttpStatusJustReturn :: (Foldable t, Monad m, MonadThrow m) => t T.Status -> a -> HttpException -> m a
+handleHttpStatusJustReturn statuses a = handleHttpStatus statuses $ \_ -> return a
+
+handleHttp404 :: (Monad m, MonadThrow m) => m a -> HttpException -> m a 
+handleHttp404 m = handleHttpStatus [T.status404] $ \_ -> m
+
+handleHttp404JustReturn :: (Monad m, MonadThrow m) => a -> HttpException -> m a
+handleHttp404JustReturn = handleHttp404 . return 
 
 class Resource a where
     type Identifier a
@@ -149,7 +162,7 @@ fail404 :: (MonadFail f) => f a
 fail404 = Fail.fail "NOT FOUND"
 
 first :: (MonadFail f) => MAS (Envelope a) -> MAS (f a)
-first makeRequest = openRequest `catch` (handleHttpStatus [T.status404] (return fail404)) 
+first makeRequest = openRequest `catch` (handleHttp404JustReturn fail404)
     where
         openRequest = do
             envelope <- makeRequest
