@@ -39,11 +39,13 @@ module Vendita.MAS
     put,
     put_,
     createIfNeeded,
+    withPage,
     withPageSize,
     withPath,
     withOption,
     withIdentifier,
     withIdentifiers,
+    listWithIdentifiers,
     Namespace (..),
     withNamespaceEndpoint,
     listNamespaces,
@@ -85,13 +87,14 @@ import qualified Network.HTTP.Req as Req
 import Text.Read hiding (get)
 
 data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
+
 type Connection = (Url 'Https, Option Https)
 
 newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch)
 
 instance MonadReader Connection MAS where
     ask = MAS ask
-    local t (MAS m) = t <$> ask >>= liftIO . runReaderT m 
+    local t (MAS m) = ask >>= liftIO . runReaderT m . t 
 
 instance MonadHttp MAS where
     handleHttpException = throwM 
@@ -122,19 +125,21 @@ handleHttpStatus statuses action e@(VanillaHttpException (C.HttpExceptionRequest
         else throwM e 
 handleHttpStatus _ _ e = throwM e 
 
+handleHttpStatus_ statuses action e = handleHttpStatus statuses (\_ -> action) e
+
 handleHttpException :: (Monad m) => m a -> HttpException -> m a
 handleHttpException m _ = m
 
 handleHttpExceptionJustReturn :: (Monad m) => a -> HttpException -> m a 
 handleHttpExceptionJustReturn = handleHttpException . return 
 
-handleHttpStatusJustReturn :: (Foldable t, Monad m, MonadThrow m) => t T.Status -> a -> HttpException -> m a
-handleHttpStatusJustReturn statuses a = handleHttpStatus statuses $ \_ -> return a
+handleHttpStatusJustReturn :: (Foldable t, MonadThrow m) => t T.Status -> a -> HttpException -> m a
+handleHttpStatusJustReturn statuses = handleHttpStatus_ statuses . return 
 
-handleHttp404 :: (Monad m, MonadThrow m) => m a -> HttpException -> m a 
-handleHttp404 m = handleHttpStatus [T.status404] $ \_ -> m
+handleHttp404 :: (MonadThrow m) => m a -> HttpException -> m a 
+handleHttp404 = handleHttpStatus_ [T.status404]
 
-handleHttp404JustReturn :: (Monad m, MonadThrow m) => a -> HttpException -> m a
+handleHttp404JustReturn :: (MonadThrow m) => a -> HttpException -> m a
 handleHttp404JustReturn = handleHttp404 . return 
 
 class Resource a where
@@ -150,9 +155,6 @@ list makeRequest = withPage 1 $ do
         then return contents
         else (contents ++) <$> (combinePages [2..pageCount])
     where
-        setPage :: Int -> Connection -> Connection
-        setPage page (url, options) = (url, options <> ("page" =: page))
-        withPage p = local (setPage p)
         combinePages [] = return []
         combinePages (p:ps) = withPage p $ do
             envelope <- makeRequest
@@ -171,11 +173,11 @@ first makeRequest = openRequest `catch` (handleHttp404JustReturn fail404)
                 then return fail404
                 else return $ return $ contents !! 0 
 
+withPage :: (MonadReader Connection m) => Int -> m a -> m a
+withPage = withOption . ("page" =:) 
+
 withPageSize :: (MonadReader Connection m) => Int -> m a -> m a
-withPageSize pageSize = local setPageSize
-    where
-        setPageSize :: Connection -> Connection
-        setPageSize (url, options) = (url, options <> ("page_size" =: pageSize))
+withPageSize = withOption . ("page_size" =:)
 
 withPath :: (MonadReader Connection m) => Text -> m a -> m a
 withPath path = local setPath

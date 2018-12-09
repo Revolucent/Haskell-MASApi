@@ -39,6 +39,9 @@ main = hspec $ around withRandomNamespace $ do
             withServer server $ do
                 createNamespace subnamespace
                 deleteNamespaces [resourceIdentifier subnamespace]
+    describe "creating a prototype" $ do
+        it "works" $\testNamespace -> do
+            putStrLn "ok"
 
 createRandomNamespaceName :: Maybe String -> IO String
 createRandomNamespaceName parent = do
