@@ -18,17 +18,27 @@ import Data.UUID (UUID)
 import Vendita.MAS.Core
 
 data Prototype = Prototype { 
-    prototypeContent :: Object 
+    prototypeName :: String,
+    prototypeTitle :: String,
+    prototypeDescription :: String
 } deriving (Show)
 
 instance Resource Prototype where
     type Identifier Prototype = String
-    resourceIdentifier _ = "prototype"
+    resourceIdentifier = prototypeName 
     resourcePathSegment = "prototype"
+
+instance NamedResource Prototype where 
+    resourceName = prototypeName
+
+instance DescribedResource Prototype where
+    resourceDescription = prototypeDescription
 
 instance FromJSON Prototype where
     parseJSON = withObject "prototype" $ \o -> do
-        let prototypeContent = o
+        prototypeName <- o .: "name"
+        prototypeTitle <- o .: "title"
+        prototypeDescription <- o .: "description"
         return Prototype{..}
 
 listAllPrototypes :: MAS [Prototype]

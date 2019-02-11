@@ -34,6 +34,7 @@ module Vendita.MAS.Core
     handleHttp404JustReturn,
     list,
     first,
+    envelopeFirst,
     mas,
     mas_,
     get,
@@ -44,6 +45,9 @@ module Vendita.MAS.Core
     patch_,
     put,
     put_,
+    delete_,
+    deleteWithIdentifiers_,
+    deleteResourceWithIdentifiers_,
     withPage,
     withPageSize,
     withPath,
@@ -185,11 +189,13 @@ first :: (MonadFail f) => MAS (Envelope a) -> MAS (f a)
 first makeRequest = openRequest `catch` (handleHttp404JustReturn fail404)
     where
         openRequest = do
-            envelope <- makeRequest
-            let contents = envelopeContents envelope
+            contents <- envelopeContents <$> makeRequest
             if (length contents) == 0
                 then return fail404
                 else return $ return (contents !! 0)
+
+envelopeFirst :: Envelope a -> a
+envelopeFirst envelope = let contents = envelopeContents envelope in contents !! 0
 
 withPage :: (MonadReader Connection m) => Int -> m a -> m a
 withPage = withOption . ("page" =:) 
@@ -232,6 +238,9 @@ firstWithIdentifier = first . (flip withIdentifier) get
 
 deleteWithIdentifiers_ :: (Show i, Typeable i) => [i] -> MAS ()
 deleteWithIdentifiers_ = (flip withIdentifiers) delete_
+
+deleteResourceWithIdentifiers_ :: forall r. (Resource r, Show (Identifier r), Typeable (Identifier r)) => [Identifier r] -> MAS ()
+deleteResourceWithIdentifiers_ = withEndpoint @r . deleteWithIdentifiers_
 
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do

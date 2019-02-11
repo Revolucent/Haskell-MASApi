@@ -46,4 +46,3 @@ listAllInvocations = listAllResource
 
 listInvocations :: [Identifier Invocation] -> MAS [Invocation]
 listInvocations = listResourceWithIdentifiers 
-

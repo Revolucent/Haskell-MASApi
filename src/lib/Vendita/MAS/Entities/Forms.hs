@@ -38,8 +38,7 @@ data Form = Form {
     formName :: String, 
     formPrototype :: String, 
     formPrototypeVersion :: Int, 
-    formValues :: [FormValue],
-    formDescription :: String
+    formValues :: [FormValue]
 } deriving (Show)
 
 instance FromJSON Form where
@@ -49,16 +48,12 @@ instance FromJSON Form where
         formPrototype <- o .: "prototype"
         formPrototypeVersion <- o .: "version"
         formValues <- o .: "values"
-        formDescription <- o .: "description"
         return Form{..}
 
 instance Resource Form where
     type Identifier Form = UUID
     resourceIdentifier = formUUID
     resourcePathSegment = "form"
-
-instance DescribedResource Form where
-    resourceDescription = formDescription
 
 newtype FormNewName = FormNewName String
 
