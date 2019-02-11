@@ -23,6 +23,8 @@ module Vendita.MAS.Core
     Connection,
     MAS,
     Resource (..),
+    DescribedResource (..),
+    NamedResource (..),
     withServer,
     Envelope (..),
     handleHttpStatus,
@@ -143,6 +145,12 @@ class Resource a where
     resourcePathSegment :: Text 
     resourceOptions :: Option 'Https
     resourceOptions = "page_size" =: (3500 :: Int)
+
+class DescribedResource a where
+    resourceDescription :: a -> String
+
+class NamedResource a where
+    resourceName :: a -> String
 
 withEndpoint :: forall r a m. (Resource r, MonadReader Connection m) => m a -> m a
 withEndpoint = withPath (resourcePathSegment @r)

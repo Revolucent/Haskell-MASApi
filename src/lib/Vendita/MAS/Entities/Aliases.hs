@@ -19,7 +19,8 @@ import Vendita.MAS.Core
 data Alias = Alias {
     aliasName :: String,
     aliasOf :: String,
-    aliasType :: Maybe String
+    aliasType :: Maybe String,
+    aliasDescription :: String
 } deriving (Show)
 
 instance Resource Alias where
@@ -28,11 +29,18 @@ instance Resource Alias where
     resourcePathSegment = "alias"
     resourceOptions = "page_size" =: (5000 :: Int)
 
+instance NamedResource Alias where
+    resourceName = aliasName
+
+instance DescribedResource Alias where
+    resourceDescription = aliasDescription
+
 instance FromJSON Alias where
     parseJSON = withObject "object" $ \o -> do
         aliasName <- o .: "name"
         aliasOf <- o .: "alias"
         aliasType <- o .: "alias_type"
+        aliasDescription <- o .: "description"
         return Alias{..}
 
 listAllAliases :: MAS [Alias] 

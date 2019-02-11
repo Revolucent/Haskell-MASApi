@@ -7,7 +7,6 @@
 
 module Vendita.MAS.Entities.Namespaces (
     Namespace (..),
-    withNamespaceEndpoint,
     listAllNamespaces,
     listNamespaces
 ) where
@@ -18,11 +17,15 @@ import Data.UUID as UUID
 import Data.UUID (UUID)
 import Vendita.MAS.Core
 
-data Namespace = Namespace { namespaceName :: String } deriving (Show)
+data Namespace = Namespace { 
+    namespaceName :: String,
+    namespaceDescription :: String
+} deriving (Show)
 
 instance FromJSON Namespace where
     parseJSON = withObject "object" $ \o -> do
         namespaceName <- o .: "name"
+        namespaceDescription <- o .: "description"
         return Namespace{..}
 
 instance Resource Namespace where
@@ -30,12 +33,15 @@ instance Resource Namespace where
     resourceIdentifier = namespaceName
     resourcePathSegment = "namespace"
 
-withNamespaceEndpoint :: (MonadReader Connection m) => m a -> m a
-withNamespaceEndpoint = withPath (resourcePathSegment @Namespace)
+instance NamedResource Namespace where
+    resourceName = namespaceName
+
+instance DescribedResource Namespace where
+    resourceDescription = namespaceDescription
 
 listAllNamespaces :: MAS [Namespace]
-listAllNamespaces = withNamespaceEndpoint listAll
+listAllNamespaces = listAllResource 
 
 listNamespaces :: [Identifier Namespace] -> MAS [Namespace]
-listNamespaces = withNamespaceEndpoint . listWithIdentifiers
+listNamespaces = listResourceWithIdentifiers 
 

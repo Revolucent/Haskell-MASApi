@@ -33,7 +33,14 @@ instance FromJSON FormValue where
         formValueDataType <- o .: "data_type"
         return FormValue{..}
 
-data Form = Form { formUUID :: UUID, formName :: String, formPrototype :: String, formPrototypeVersion :: Int, formValues :: [FormValue] } deriving (Show)
+data Form = Form { 
+    formUUID :: UUID, 
+    formName :: String, 
+    formPrototype :: String, 
+    formPrototypeVersion :: Int, 
+    formValues :: [FormValue],
+    formDescription :: String
+} deriving (Show)
 
 instance FromJSON Form where
     parseJSON = withObject "object" $ \o -> do
@@ -42,12 +49,16 @@ instance FromJSON Form where
         formPrototype <- o .: "prototype"
         formPrototypeVersion <- o .: "version"
         formValues <- o .: "values"
+        formDescription <- o .: "description"
         return Form{..}
 
 instance Resource Form where
     type Identifier Form = UUID
     resourceIdentifier = formUUID
     resourcePathSegment = "form"
+
+instance DescribedResource Form where
+    resourceDescription = formDescription
 
 newtype FormNewName = FormNewName String
 

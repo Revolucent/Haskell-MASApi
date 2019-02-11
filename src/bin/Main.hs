@@ -6,16 +6,19 @@ module Main where
 import qualified Config
 import Control.Monad (forM_)
 import Control.Monad.IO.Class (liftIO)
+import Data.Aeson (Object)
+import Data.HashMap.Strict (keys)
 import Data.List (sort)
 import Network.HTTP.Req (https, (/:))
-import Vendita.MAS as MAS
+import Vendita.MAS
 
 server = Server { 
-    MAS.serverUrl = (https Config.serverHost) /: "mas", 
-    MAS.serverUser = Config.serverUser, 
-    MAS.serverPassword = Config.serverPassword 
+    serverUrl = (https Config.serverHost) /: "mas", 
+    serverUser = Config.serverUser, 
+    serverPassword = Config.serverPassword 
 }
 
 main = withServer server $ do 
-    invocations <- withInvocationDateRange "2019-01-01" 300 listAllInvocations
-    liftIO $ print invocations
+    (envelope :: Envelope Object) <- withPath "prototype" get
+    let contents = envelopeContents envelope
+    liftIO $ print $ keys (contents !! 0) 
