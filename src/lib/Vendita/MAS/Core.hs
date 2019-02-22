@@ -34,6 +34,7 @@ module Vendita.MAS.Core
     handleHttp404JustReturn,
     list,
     first,
+    firstResourceWithIdentifier,
     envelopeFirst,
     mas,
     mas_,
@@ -235,6 +236,9 @@ listAll = withAll $ list get
 
 firstWithIdentifier :: (MonadFail f, FromJSON a, Resource a, Show (Identifier a), Typeable (Identifier a)) => Identifier a -> MAS (f a) 
 firstWithIdentifier = first . (flip withIdentifier) get
+
+firstResourceWithIdentifier :: forall a f. (MonadFail f, FromJSON a, Resource a, Show (Identifier a), Typeable (Identifier a)) => Identifier a -> MAS (f a) 
+firstResourceWithIdentifier = withResource @a . firstWithIdentifier
 
 deleteWithIdentifiers_ :: (Show i, Typeable i) => [i] -> MAS ()
 deleteWithIdentifiers_ = (flip withIdentifiers) delete_
