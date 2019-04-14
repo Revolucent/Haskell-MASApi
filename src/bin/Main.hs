@@ -36,11 +36,16 @@ server = Server {
     serverPassword = Config.serverPassword 
 }
 
+printListWithMessage :: (Resource r, ToJSON r) => String -> MAS [r] -> MAS ()
+printListWithMessage message list = do
+    resources <- list
+    liftIO $ do
+        putStrLn $ printf "%s:\n" message
+        forM_ resources (liftIO . printPretty)
+        putStr "\n"
+
 main = withServer server $ do 
-    processes <- listAllProcesses
-    liftIO $ forM_ processes $ \process -> do
-        let name = processName process
-        let privileges = processPrivileges process
-        putStr $ printf "%s:\n" name
-        printPretty privileges
-        putStr "\n\n"
+    user <- createUser "watusi" "ichabod" "A watusi" []
+    printListWithMessage "After creating watusi" listAllUsers
+    deleteUser "watusi" 
+    printListWithMessage "After deleting watusi" listAllUsers
