@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,6 +10,8 @@
 module Vendita.MAS.Entities.Invocations (
     Invocation (..),
     InvocationStatus (..),
+    Parameters (..),
+    (%=),
     listAllInvocations,
     listInvocations,
     withInvocationDateRange,
@@ -20,12 +23,15 @@ module Vendita.MAS.Entities.Invocations (
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.Reader
 import Data.Aeson
-import Data.Aeson.Types (typeMismatch)
+import Data.Aeson.Types (typeMismatch, Parser)
+import qualified Data.HashMap.Strict as HMap
 import Data.List (intercalate)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust, isJust)
+import Data.Monoid
 import Data.UUID as UUID
 import Data.UUID (UUID)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (unpack)
 import Network.HTTP.Req ((=:))
 import Text.Read (readMaybe)
@@ -37,12 +43,25 @@ instance FromJSON InvocationStatus where
     parseJSON (String string) = return $ fromMaybe UNKNOWN (readMaybe $ unpack string)
     parseJSON value = typeMismatch "Status" value
 
+newtype Parameters = Parameters (Map String Value) deriving (Eq, Read, Show, Semigroup, Monoid)
+
+infixr 5 %=
+
+(%=) :: (ToJSON v) => String -> v -> Parameters
+name %= value = Parameters $ Map.fromList [(name, toJSON value)]
+
+instance ToJSON Parameters where
+    toJSON (Parameters parameters) = toJSON parameters 
+
+instance FromJSON Parameters where
+    parseJSON = fmap Parameters . parseJSON 
+
 data Invocation = Invocation {
     invocationUUID :: UUID,
     invocationProcess :: String,
     invocationDateInvoked :: String, -- for now
     invocationStatus :: InvocationStatus,
-    invocationParameters :: Map String Value 
+    invocationParameters :: Parameters 
 } deriving (Show)
 
 instance FromJSON Invocation where

@@ -15,11 +15,13 @@ module Vendita.MAS.Entities.Processes (
 
 import Data.Aeson
 import Vendita.MAS.Core
+import Vendita.MAS.Entities.Privileges
 
 data Process = Process {
     processName :: String,
     processDescription :: String,
-    processSteps :: [Step]
+    processSteps :: [Step],
+    processPrivileges :: Privileges
 } deriving (Show)
 
 instance FromJSON Process where
@@ -27,6 +29,7 @@ instance FromJSON Process where
         processName <- o .: "name"
         processDescription <- o .: "description"
         processSteps <- o .: "steps"
+        processPrivileges <- o .: "privileges"
         return Process{..}
 
 instance Resource Process where

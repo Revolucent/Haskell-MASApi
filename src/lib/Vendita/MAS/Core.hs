@@ -18,6 +18,7 @@
 
 module Vendita.MAS.Core
 (
+    (.=.),
     Defaultable (..),
     Server (..),
     Connection,
@@ -49,6 +50,8 @@ module Vendita.MAS.Core
     delete_,
     deleteWithIdentifiers_,
     deleteResourceWithIdentifiers_,
+    toKeyValue,
+    toObject,
     withPage,
     withPageSize,
     withPath,
@@ -73,6 +76,7 @@ import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
+import Data.Aeson.Types (Pair)
 import Data.ByteString (ByteString)
 import Data.List (intercalate)
 import Data.Map (Map)
@@ -88,6 +92,16 @@ import qualified Network.HTTP.Types as T
 import Network.HTTP.Req hiding (handleHttpException)
 import qualified Network.HTTP.Req as Req 
 import Text.Read hiding (get)
+
+toKeyValue :: (ToJSON v) => Text -> (o -> v) -> o -> Pair 
+toKeyValue key getValue o = key .= (toJSON $ getValue o)
+
+infixr 5 .=. 
+(.=.) :: (ToJSON v) => Text -> (o -> v) -> (o -> Pair)
+key .=. getValue = toKeyValue key getValue
+
+toObject :: [o -> Pair] -> o -> Value 
+toObject kvs o = object $ map (\kv -> kv o) kvs
 
 data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
 

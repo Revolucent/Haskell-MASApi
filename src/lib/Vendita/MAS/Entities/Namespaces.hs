@@ -7,12 +7,13 @@
 
 module Vendita.MAS.Entities.Namespaces (
     Namespace (..),
+    createNamespace,
+    deleteNamespace,
+    deleteNamespaces,
+    getNamespace,
     listAllNamespaces,
     listNamespaces,
-    createNamespace,
-    modifyNamespace,
-    deleteNamespace_,
-    deleteNamespaces_
+    modifyNamespace
 ) where
 
 import Control.Monad.Reader
@@ -54,14 +55,17 @@ listAllNamespaces = listAllResource
 listNamespaces :: [Identifier Namespace] -> MAS [Namespace]
 listNamespaces = listResourceWithIdentifiers 
 
+getNamespace :: Identifier Namespace -> MAS (Maybe Namespace)
+getNamespace = firstResourceWithIdentifier
+
 createNamespace :: String -> String -> MAS Namespace
 createNamespace name description = fmap envelopeFirst $ withEndpoint @Namespace $ post Namespace { namespaceName = name, namespaceDescription = description } 
 
 modifyNamespace :: String -> String -> String -> MAS Namespace
 modifyNamespace name newName newDescription = fmap envelopeFirst $ withEndpoint @Namespace $ withPath (pack name) $ patch Namespace { namespaceName = newName, namespaceDescription = newDescription } 
 
-deleteNamespaces_ :: [Identifier Namespace] -> MAS ()
-deleteNamespaces_ = deleteResourceWithIdentifiers_ @Namespace
+deleteNamespaces :: [Identifier Namespace] -> MAS ()
+deleteNamespaces = deleteResourceWithIdentifiers_ @Namespace
 
-deleteNamespace_ :: Identifier Namespace -> MAS ()
-deleteNamespace_ ns = deleteNamespaces_ [ns]
+deleteNamespace :: Identifier Namespace -> MAS ()
+deleteNamespace ns = deleteNamespaces [ns]

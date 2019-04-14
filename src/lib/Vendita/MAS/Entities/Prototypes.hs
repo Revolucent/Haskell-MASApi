@@ -7,6 +7,7 @@
 
 module Vendita.MAS.Entities.Prototypes (
     Prototype (..),
+    Field (..),
     listAllPrototypes,
     listPrototypes
 ) where
@@ -17,10 +18,24 @@ import Data.UUID as UUID
 import Data.UUID (UUID)
 import Vendita.MAS.Core
 
+data Field = Field {
+    fieldName :: String,
+    fieldDataType :: String,
+    fieldPosition :: Int 
+} deriving (Show)
+
+instance FromJSON Field where
+    parseJSON = withObject "field" $ \o -> do
+        fieldName <- o .: "name"
+        fieldDataType <- o .: "data_type"
+        fieldPosition <- o .: "position"
+        return Field{..}
+
 data Prototype = Prototype { 
     prototypeName :: String,
     prototypeTitle :: String,
-    prototypeDescription :: String
+    prototypeDescription :: String,
+    prototypeFields :: [Field]
 } deriving (Show)
 
 instance Resource Prototype where
@@ -39,6 +54,7 @@ instance FromJSON Prototype where
         prototypeName <- o .: "name"
         prototypeTitle <- o .: "title"
         prototypeDescription <- o .: "description"
+        prototypeFields <- o .: "fields"
         return Prototype{..}
 
 listAllPrototypes :: MAS [Prototype]
