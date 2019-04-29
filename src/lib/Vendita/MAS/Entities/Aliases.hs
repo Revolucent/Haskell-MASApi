@@ -27,7 +27,6 @@ instance Resource Alias where
     type Identifier Alias = String
     resourceIdentifier = aliasName
     resourcePathSegment = "alias"
-    resourceOptions = "page_size" =: (5000 :: Int)
 
 instance NamedResource Alias where
     resourceName = aliasName

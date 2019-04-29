@@ -7,8 +7,13 @@
 
 module Vendita.MAS.Entities.Constants (
     Constant (..),
+    ChangeConstant (..),
+    deleteConstant,
+    emptyChangeConstant,
     listAllConstants,
-    listConstants
+    listConstants,
+    createConstant,
+    patchConstant
 ) where
 
 import Control.Monad.Reader
@@ -42,8 +47,39 @@ instance FromJSON Constant where
         constantDescription <- o .: "description"
         return Constant{..}
 
+instance ToJSON Constant where
+    toJSON Constant{..} = object [
+            "name" .= constantName,
+            "value" .= constantValue,
+            "description" .= constantDescription
+        ]
+
+data ChangeConstant = ChangeConstant {
+    changeConstantRename :: Maybe String,
+    changeConstantValue :: Maybe String,
+    changeConstantDescription :: Maybe String
+} deriving (Show)
+
+emptyChangeConstant = ChangeConstant { changeConstantRename = Nothing, changeConstantValue = Nothing, changeConstantDescription = Nothing }
+
+instance ToJSON ChangeConstant where
+    toJSON ChangeConstant{..} = object $ filterNulls [
+            "rename" .= changeConstantRename,
+            "value" .= changeConstantValue,
+            "description" .= changeConstantDescription
+        ]
+
 listAllConstants :: MAS [Constant]
 listAllConstants = listAllResource
 
 listConstants :: [Identifier Constant] -> MAS [Constant]
 listConstants = listResourceWithIdentifiers
+
+createConstant :: Constant -> MAS () 
+createConstant constant = withResource @Constant $ post_ constant
+
+patchConstant :: Identifier Constant -> ChangeConstant -> MAS Constant
+patchConstant name constant = fmap envelopeFirst $ withResource @Constant $ withIdentifier name $ patch constant
+
+deleteConstant :: Identifier Constant -> MAS ()
+deleteConstant = deleteResourceWithIdentifier_ @Constant

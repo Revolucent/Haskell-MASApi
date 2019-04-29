@@ -35,8 +35,9 @@ data Account = Account {
     accountUser :: String,
     accountUserKey :: Maybe String,
     accountAddress :: String,
-    accountPort :: Maybe Int
-}
+    accountPort :: Maybe Int,
+    accountSpecial :: Object
+} deriving (Show)
 
 instance FromJSON Account where
     parseJSON = withObject "account" $ \o -> do 
@@ -47,6 +48,7 @@ instance FromJSON Account where
         accountUserKey <- o .: "user_key"
         accountAddress <- o .: "address"
         accountPort <- o .: "port"
+        accountSpecial <- o .: "special"
         return Account{..}
 
 instance ToJSON Account where
@@ -57,14 +59,14 @@ instance ToJSON Account where
             "user" .= (accountUser account),
             "user_key" .= (accountUserKey account),
             "address" .= (accountAddress account),
-            "port" .= (accountPort account)
+            "port" .= (accountPort account),
+            "special" .= (accountSpecial account)
         ]
 
 instance Resource Account where
     type Identifier Account = String
     resourceIdentifier = accountName 
     resourcePathSegment = "account"
-    resourceOptions = "page_size" =: (5000 :: Int)
 
 instance NamedResource Account where
     resourceName = accountName 

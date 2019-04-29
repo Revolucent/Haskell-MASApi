@@ -13,6 +13,9 @@ module Vendita.MAS.Entities.Schedules (
     Crontab (..),
     (@=),
     createSchedule,
+    schedule,
+    deleteSchedule,
+    getSchedule,
     listAllSchedules
 ) where
 
@@ -113,8 +116,25 @@ instance FromJSON Schedule where
         scheduleCrontab <- parseJSON $ toJSON o
         return Schedule{..}
         
-createSchedule :: Schedule -> MAS Object 
+createSchedule :: Schedule -> MAS Schedule 
 createSchedule schedule = fmap envelopeFirst $ withEndpoint @Schedule $ post schedule
+
+schedule :: String -> String -> String -> Parameters -> Crontab -> MAS Schedule
+schedule name description process parameters crontab = do
+    let schedule = Schedule {
+            scheduleName = name,
+            scheduleDescription = description,
+            scheduleProcess = process,
+            scheduleParameters = parameters,
+            scheduleCrontab = crontab
+        }
+    createSchedule schedule
 
 listAllSchedules :: MAS [Schedule]
 listAllSchedules = listAllResource
+
+getSchedule :: Identifier Schedule -> MAS (Maybe Schedule)
+getSchedule = firstResourceWithIdentifier
+
+deleteSchedule :: Identifier Schedule -> MAS ()
+deleteSchedule = deleteResourceWithIdentifier_ @Schedule

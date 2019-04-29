@@ -23,11 +23,15 @@ module Vendita.MAS.Core
     Server (..),
     Connection,
     MAS,
+    MASTime(..),
     Resource (..),
     DescribedResource (..),
     NamedResource (..),
     withServer,
     Envelope (..),
+    defaultPageSize,
+    defaultResponseTimeout,
+    filterNulls,
     handleHttpStatus,
     handleHttpException,
     handleHttpExceptionJustReturn,
@@ -39,6 +43,7 @@ module Vendita.MAS.Core
     envelopeFirst,
     mas,
     mas_,
+    raw,
     get,
     get_,
     post,
@@ -49,9 +54,12 @@ module Vendita.MAS.Core
     put_,
     delete_,
     deleteWithIdentifiers_,
+    deleteResourceWithIdentifier_,
     deleteResourceWithIdentifiers_,
+    pageSize,
     toKeyValue,
     toObject,
+    withConnection,
     withPage,
     withPageSize,
     withPath,
@@ -60,14 +68,17 @@ module Vendita.MAS.Core
     withIdentifiers,
     listWithIdentifiers,
     listAll,
+    toMASTime,
     withAll,
     withEndpoint,
     withResource,
+    listResource,
     listAllResource,
     listResourceWithIdentifiers
 )
 where
 
+import Control.Applicative (empty)
 import Control.Exception.Base (Exception, throwIO)
 import qualified Control.Exception.Base as E
 import Control.Monad.Catch
@@ -84,6 +95,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text, pack, isInfixOf, strip, unpack)
 import Data.Time
+import Data.Time.Format
 import Data.Typeable
 import Data.UUID
 import GHC.Exts (fromList)
@@ -91,7 +103,29 @@ import qualified Network.HTTP.Client as C
 import qualified Network.HTTP.Types as T
 import Network.HTTP.Req hiding (handleHttpException)
 import qualified Network.HTTP.Req as Req 
-import Text.Read hiding (get)
+import Text.Read hiding (get, String)
+import Text.Printf
+
+newtype MASTime = MASTime { utcTime :: UTCTime } deriving (Eq, Ord)
+
+toMASTime :: UTCTime -> MASTime
+toMASTime t = MASTime { utcTime = t }
+
+instance Show MASTime where
+    show = show . utcTime 
+
+instance FormatTime MASTime where
+    formatCharacter c = fmap (\f locale mpado i t -> f locale mpado i (utcTime t)) (formatCharacter c)
+
+instance ParseTime MASTime where
+    buildTime locale cs = fmap toMASTime (buildTime locale cs)
+
+instance ToJSON MASTime where
+    toJSON MASTime{..} = toJSON $ formatTime defaultTimeLocale "%FT%T" utcTime
+
+instance FromJSON MASTime where
+    parseJSON (String s) = parseTimeM True defaultTimeLocale "%FT%T" $ unpack s 
+    parseJSON _ = empty
 
 toKeyValue :: (ToJSON v) => Text -> (o -> v) -> o -> Pair 
 toKeyValue key getValue o = key .= (toJSON $ getValue o)
@@ -103,7 +137,12 @@ key .=. getValue = toKeyValue key getValue
 toObject :: [o -> Pair] -> o -> Value 
 toObject kvs o = object $ map (\kv -> kv o) kvs
 
-data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString }
+filterNulls :: [Pair] -> [Pair]
+filterNulls [] = []
+filterNulls ((_, Null):ps) = filterNulls ps
+filterNulls (p:ps) = (p:(filterNulls ps))
+
+data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString } deriving (Eq, Show)
 
 type Connection = (Url 'Https, Option Https)
 
@@ -116,11 +155,14 @@ instance MonadReader Connection MAS where
 instance MonadHttp MAS where
     handleHttpException = throwM 
 
+withConnection :: (MonadIO m) => Connection -> MAS a -> m a
+withConnection connection (MAS m) = liftIO $ runReaderT m connection
+
 withServer :: (MonadIO m) => Server -> MAS a -> m a
-withServer server (MAS m) = do
+withServer server m = do
     let accept = header "Accept" "application/json"
     let auth = basicAuth (serverUser server) (serverPassword server)
-    liftIO $ runReaderT m (serverUrl server, (accept <> auth))
+    withConnection (serverUrl server, (accept <> auth)) m
 
 data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } deriving (Show)
 
@@ -158,12 +200,24 @@ handleHttp404 = handleHttpStatus_ [T.status404]
 handleHttp404JustReturn :: (MonadThrow m) => a -> HttpException -> m a
 handleHttp404JustReturn = handleHttp404 . return 
 
+second :: Int
+second = 1000000
+
+pageSize :: Int -> Option 'Https
+pageSize size = "page_size" =: size
+
+defaultPageSize :: Option 'Https
+defaultPageSize = pageSize 4000000 
+
+defaultResponseTimeout :: Option 'Https
+defaultResponseTimeout = responseTimeout (600 * second)
+
 class Resource a where
     type Identifier a :: *
     resourceIdentifier :: a -> Identifier a
     resourcePathSegment :: Text 
     resourceOptions :: Option 'Https
-    resourceOptions = "page_size" =: (3500 :: Int)
+    resourceOptions = defaultPageSize <> defaultResponseTimeout
 
 class DescribedResource a where
     resourceDescription :: a -> String
@@ -180,13 +234,20 @@ withResource = withEndpoint @r . withOption (resourceOptions @r)
 listAllResource :: forall a. (FromJSON a, Resource a) => MAS [a]
 listAllResource = withResource @a listAll
 
+listResource :: forall a. (FromJSON a, Resource a) => MAS [a]
+listResource = withResource @a $ list get
+
 listResourceWithIdentifiers :: forall a. (FromJSON a, Resource a, Show (Identifier a), Typeable (Identifier a)) => [Identifier a] -> MAS [a]
 listResourceWithIdentifiers = withResource @a . listWithIdentifiers
 
-list :: (MonadReader Connection m) => m (Envelope a) -> m [a]
+list :: (MonadReader Connection m, MonadIO m) => m (Envelope a) -> m [a]
 list makeRequest = do
+    liftIO $ do
+        t <- getCurrentTime
+        printf "Requesting page 1 at %s\n" (show t)
     envelope <- withPage 1 makeRequest 
     let pageCount = envelopePageCount envelope
+    liftIO $ printf "Page count is %d\n" pageCount
     let contents = envelopeContents envelope
     if pageCount <= 1
         then return contents
@@ -194,6 +255,9 @@ list makeRequest = do
     where
         combinePages [] = return []
         combinePages (p:ps) = do 
+            liftIO $ do
+                t <- getCurrentTime
+                printf "Requesting page %d at %s\n" p (show t)
             contents <- envelopeContents <$> withPage p makeRequest
             (contents ++) <$> combinePages ps
 
@@ -259,6 +323,14 @@ deleteWithIdentifiers_ = (flip withIdentifiers) delete_
 
 deleteResourceWithIdentifiers_ :: forall r. (Resource r, Show (Identifier r), Typeable (Identifier r)) => [Identifier r] -> MAS ()
 deleteResourceWithIdentifiers_ = withEndpoint @r . deleteWithIdentifiers_
+
+deleteResourceWithIdentifier_ :: forall r. (Resource r, Show (Identifier r), Typeable (Identifier r)) => Identifier r -> MAS ()
+deleteResourceWithIdentifier_ identifier = deleteResourceWithIdentifiers_ @r [identifier]
+
+raw :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS ByteString 
+raw method body = do
+    (url, options) <- ask
+    fmap responseBody $ req method url body bsResponse options
 
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do

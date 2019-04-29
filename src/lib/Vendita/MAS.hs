@@ -3,7 +3,9 @@ module Vendita.MAS (
     module Vendita.MAS.Entities.Accounts,
     module Vendita.MAS.Entities.Aliases,
     module Vendita.MAS.Entities.Constants,
+    module Vendita.MAS.Entities.DataTypes,
     module Vendita.MAS.Entities.Forms,
+    module Vendita.MAS.Entities.Groups,
     module Vendita.MAS.Entities.Invocations,
     module Vendita.MAS.Entities.Namespaces,
     module Vendita.MAS.Entities.Privileges,
@@ -18,7 +20,9 @@ import Vendita.MAS.Core
 import Vendita.MAS.Entities.Accounts
 import Vendita.MAS.Entities.Aliases
 import Vendita.MAS.Entities.Constants
+import Vendita.MAS.Entities.DataTypes
 import Vendita.MAS.Entities.Forms
+import Vendita.MAS.Entities.Groups
 import Vendita.MAS.Entities.Invocations
 import Vendita.MAS.Entities.Namespaces
 import Vendita.MAS.Entities.Processes
