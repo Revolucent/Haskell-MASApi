@@ -27,6 +27,7 @@ module Vendita.MAS.Core
     MASTime(..),
     Resource (..),
     DescribedResource (..),
+    EnumerationKey(..),
     NamedResource (..),
     withServer,
     Envelope (..),
@@ -88,7 +89,7 @@ import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
-import Data.Aeson.Types (Pair, toJSONKeyText)
+import Data.Aeson.Types (Pair, Parser, toJSONKeyText, typeMismatch)
 import Data.ByteString (ByteString)
 import Data.Char (toLower, toUpper)
 import Data.Hashable (Hashable)
@@ -131,25 +132,36 @@ instance FromJSON MASTime where
     parseJSON (String s) = parseTimeM True defaultTimeLocale "%FT%T" $ unpack s 
     parseJSON _ = empty
 
-data Entity = ACCOUNT | ALIAS | CONSTANT | EXCEPTION | FORM | NAMESPACE | PROCESS | PROTOTYPE | TYPE deriving (Eq, Ord, Enum, Read, Show, Generic)
+class (Read a, Show a, ToJSON a, FromJSON a, FromJSONKey a) => EnumerationKey a where
+    errorMessage :: String 
+    errorMessage = "invalid"
+    enumerationToJSON :: a -> Value 
+    enumerationToJSON = toJSON . map toLower . show
+    enumerationToJSONKey :: ToJSONKeyFunction a 
+    enumerationToJSONKey = toJSONKeyText (pack . map toLower . show)
+    enumerationFromJSON :: Value -> Parser a
+    enumerationFromJSON invalid@(String s) = case readMaybe $ map toUpper $ unpack s of
+        Just value -> return value
+        _ -> typeMismatch (errorMessage @a) invalid
+    enumerationFromJSON invalid = typeMismatch (errorMessage @a) invalid
+    enumerationFromJSONKey :: FromJSONKeyFunction a
+    enumerationFromJSONKey = FromJSONKeyText (read . map toUpper . unpack)
 
-{-
+data Entity = ACCOUNT | ALIAS | CONSTANT | EXCEPTION | FORM | NAMESPACE | PROCESS | PROTOTYPE | SCHEDULE | TYPE deriving (Eq, Ord, Enum, Read, Show)
+
+instance EnumerationKey Entity 
 
 instance ToJSON Entity where
-    toJSON = toJSON . map toLower . show
-
-instance FromJSON Entity where
-    parseJSON (String s) = return $ read $ map toUpper $ unpack s
-
-instance FromJSONKey Entity where
-    fromJSONKey = FromJSONKeyText . read . unpack 
+    toJSON = enumerationToJSON
 
 instance ToJSONKey Entity where
-    toJSONKey = toJSONKeyText (pack . show)
+    toJSONKey = enumerationToJSONKey
+   
+instance FromJSON Entity where
+    parseJSON = enumerationFromJSON
 
-instance Hashable Entity
-
--}
+instance FromJSONKey Entity where
+    fromJSONKey = enumerationFromJSONKey
 
 toKeyValue :: (ToJSON v) => Text -> (o -> v) -> o -> Pair 
 toKeyValue key getValue o = key .= (toJSON $ getValue o)

@@ -23,26 +23,22 @@ import Data.Text (pack)
 import Data.UUID as UUID
 import Data.UUID (UUID)
 import Vendita.MAS.Core
-import Vendita.MAS.Entities.Privileges
 
 data Namespace = Namespace { 
     namespaceName :: String,
-    namespaceDescription :: String,
-    namespacePrivileges :: Maybe Privileges
+    namespaceDescription :: String
 } deriving (Show)
 
 instance FromJSON Namespace where
     parseJSON = withObject "object" $ \o -> do
         namespaceName <- o .: "name"
         namespaceDescription <- o .: "description"
-        namespacePrivileges <- o .: "privileges"
         return Namespace{..}
 
 instance ToJSON Namespace where
     toJSON Namespace{..} = object $ filterNulls [
             "name" .= namespaceName,
-            "description" .= namespaceDescription,
-            "privileges" .= namespacePrivileges
+            "description" .= namespaceDescription
         ] 
 
 instance Resource Namespace where
@@ -66,10 +62,10 @@ getNamespace :: Identifier Namespace -> MAS (Maybe Namespace)
 getNamespace = firstResourceWithIdentifier
 
 createNamespace :: String -> String -> MAS Namespace
-createNamespace name description = fmap envelopeFirst $ withEndpoint @Namespace $ post Namespace { namespaceName = name, namespaceDescription = description, namespacePrivileges = Nothing } 
+createNamespace name description = fmap envelopeFirst $ withEndpoint @Namespace $ post Namespace { namespaceName = name, namespaceDescription = description } 
 
 modifyNamespace :: String -> String -> String -> MAS Namespace
-modifyNamespace name newName newDescription = fmap envelopeFirst $ withEndpoint @Namespace $ withPath (pack name) $ patch Namespace { namespaceName = newName, namespaceDescription = newDescription, namespacePrivileges = Nothing } 
+modifyNamespace name newName newDescription = fmap envelopeFirst $ withEndpoint @Namespace $ withPath (pack name) $ patch Namespace { namespaceName = newName, namespaceDescription = newDescription } 
 
 deleteNamespaces :: [Identifier Namespace] -> MAS ()
 deleteNamespaces = deleteResourceWithIdentifiers_ @Namespace

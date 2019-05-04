@@ -21,7 +21,6 @@ module Vendita.MAS.Entities.Processes (
 
 import Data.Aeson
 import Vendita.MAS.Core
-import Vendita.MAS.Entities.Privileges
 
 data ProcessParameter = ProcessParameter {
     processParameterName :: String,
@@ -53,8 +52,7 @@ data Process = Process {
     processName :: String,
     processDescription :: String,
     processParameters :: [ProcessParameter],
-    processSteps :: Maybe [Step],
-    processPrivileges :: Maybe Privileges
+    processSteps :: Maybe [Step]
 } deriving (Show)
 
 instance FromJSON Process where
@@ -63,7 +61,6 @@ instance FromJSON Process where
         processDescription <- o .: "description"
         processParameters <- o .: "parameters"
         processSteps <- o .: "steps"
-        processPrivileges <- o .: "privileges"
         return Process{..}
 
 instance ToJSON Process where
@@ -71,8 +68,7 @@ instance ToJSON Process where
             "name" .=. processName,
             "description" .=. processDescription,
             "parameters" .=. processParameters,
-            "steps" .=. processSteps,
-            "privileges" .=. processPrivileges
+            "steps" .=. processSteps
         ]
 
 data NewProcess = NewProcess {
