@@ -22,10 +22,11 @@ import Control.Monad.Trans.Maybe (runMaybeT)
 import Data.Aeson (KeyValue, FromJSON, ToJSON, encode, parseJSON, toJSON, Value(String), object, (.=), (.:), withObject, Object)
 import Data.Aeson.Encode.Pretty (encodePretty)
 import qualified Data.ByteString as BS 
+import Data.Char (toLower)
 import qualified Data.HashMap.Strict as Map
 import Data.List (intercalate)
 import qualified Data.Set as Set
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Time
 import Data.Time.Clock
 import Data.Time.LocalTime
@@ -36,13 +37,10 @@ import Data.List (intercalate, isPrefixOf, isInfixOf, nub, sort, sortOn)
 import Data.List.Split (splitOn)
 import Data.Maybe (catMaybes, isJust, fromJust, fromMaybe)
 import GHC.Generics
-import Network.HTTP.Req (https, (/:), HttpException, GET(..), NoReqBody(..))
+import Network.HTTP.Req (https, (/:), HttpException, GET(..), NoReqBody(..), PATCH(..))
 import Text.Printf (printf)
 import Vendita.MAS
 import Vendita.MAS.Diagnostics
-
-domains :: [Text]
-domains = ["mas3cloud3.venditabeta.com", "mas3cloud4.venditabeta.com", "mas3cloud5.venditabeta.com", "mas3cloud7.venditabeta.com"]
 
 defaultServer = Server { 
     serverUrl = (https Config.serverHost) /: "mas", 
@@ -122,5 +120,17 @@ filterOn v get = filterWhere v (==) get
 filterIsInfixOf v get = filterWhere v isInfixOf get
 filterIsPrefixOf v get = filterWhere v isPrefixOf get
 
+domains :: [Text]
+domains = ["mas3cloud10.venditamas.com", "mas3cloud11.venditamas.com", "mas3cloud12.venditamas.com", "mas3cloud13.venditamas.com", "mas3cloud14.venditamas.com", "mas3cloud15.venditamas.com", "mas3cloud17.venditamas.com"]
+
+data PermissionOperation = GRANT | REVOKE | ALLOW | DENY deriving (Eq, Ord, Enum, Read, Show)
+
+changeClassPermission :: Identifier User -> PermissionOperation -> Entity -> MAS Value 
+changeClassPermission name op entity = withResource @User $ do
+    let configure = withIdentifier name . withPath (pack $ map toLower $ show op) . withPath "create" . withPath (pack $ map toLower $ show entity)
+    envelope <- configure $ mas PATCH NoReqBody
+    return $ fromJust $ envelopeFirst envelope
+
 main = withServer defaultServer $ do
-    deleteProcess "ventoso.my_user"
+    revokeMembershipInGroupsFromUser "zinger" ["zing"]
+    listAllUsers >>= liftIO . printPretty

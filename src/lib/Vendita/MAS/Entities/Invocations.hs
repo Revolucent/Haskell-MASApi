@@ -11,6 +11,7 @@ module Vendita.MAS.Entities.Invocations (
     Invocation (..),
     InvocationStatus (..),
     Parameters (..),
+    VariadicParameter(..),
     (%=),
     ($=),
     invoke,
@@ -75,11 +76,11 @@ data VariadicParameter = VariadicParameter {
     variadicParameterName :: String,
     variadicParameterDescription :: String,
     variadicParameterType :: String,
-    variadicParameterDeflt :: String
+    variadicParameterDeflt :: Maybe String
 }
 
 instance ToJSON VariadicParameter where
-    toJSON VariadicParameter{..} = object [ 
+    toJSON VariadicParameter{..} = object $ filterNulls [ 
             "name" .= variadicParameterName,
             "description" .= variadicParameterDescription,
             "type" .= variadicParameterType,

@@ -20,6 +20,7 @@ module Vendita.MAS.Core
 (
     (.=.),
     Defaultable (..),
+    Entity (..),
     Server (..),
     Connection,
     MAS,
@@ -87,8 +88,10 @@ import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
-import Data.Aeson.Types (Pair)
+import Data.Aeson.Types (Pair, toJSONKeyText)
 import Data.ByteString (ByteString)
+import Data.Char (toLower, toUpper)
+import Data.Hashable (Hashable)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -98,6 +101,7 @@ import Data.Time
 import Data.Time.Format
 import Data.Typeable
 import Data.UUID
+import GHC.Generics
 import GHC.Exts (fromList)
 import qualified Network.HTTP.Client as C 
 import qualified Network.HTTP.Types as T
@@ -126,6 +130,26 @@ instance ToJSON MASTime where
 instance FromJSON MASTime where
     parseJSON (String s) = parseTimeM True defaultTimeLocale "%FT%T" $ unpack s 
     parseJSON _ = empty
+
+data Entity = ACCOUNT | ALIAS | CONSTANT | EXCEPTION | FORM | NAMESPACE | PROCESS | PROTOTYPE | TYPE deriving (Eq, Ord, Enum, Read, Show, Generic)
+
+{-
+
+instance ToJSON Entity where
+    toJSON = toJSON . map toLower . show
+
+instance FromJSON Entity where
+    parseJSON (String s) = return $ read $ map toUpper $ unpack s
+
+instance FromJSONKey Entity where
+    fromJSONKey = FromJSONKeyText . read . unpack 
+
+instance ToJSONKey Entity where
+    toJSONKey = toJSONKeyText (pack . show)
+
+instance Hashable Entity
+
+-}
 
 toKeyValue :: (ToJSON v) => Text -> (o -> v) -> o -> Pair 
 toKeyValue key getValue o = key .= (toJSON $ getValue o)
@@ -242,12 +266,8 @@ listResourceWithIdentifiers = withResource @a . listWithIdentifiers
 
 list :: (MonadReader Connection m, MonadIO m) => m (Envelope a) -> m [a]
 list makeRequest = do
-    liftIO $ do
-        t <- getCurrentTime
-        printf "Requesting page 1 at %s\n" (show t)
     envelope <- withPage 1 makeRequest 
     let pageCount = envelopePageCount envelope
-    liftIO $ printf "Page count is %d\n" pageCount
     let contents = envelopeContents envelope
     if pageCount <= 1
         then return contents
@@ -255,9 +275,6 @@ list makeRequest = do
     where
         combinePages [] = return []
         combinePages (p:ps) = do 
-            liftIO $ do
-                t <- getCurrentTime
-                printf "Requesting page %d at %s\n" p (show t)
             contents <- envelopeContents <$> withPage p makeRequest
             (contents ++) <$> combinePages ps
 

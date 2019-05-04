@@ -23,20 +23,27 @@ import Data.Text (pack)
 import Data.UUID as UUID
 import Data.UUID (UUID)
 import Vendita.MAS.Core
+import Vendita.MAS.Entities.Privileges
 
 data Namespace = Namespace { 
     namespaceName :: String,
-    namespaceDescription :: String
+    namespaceDescription :: String,
+    namespacePrivileges :: Maybe Privileges
 } deriving (Show)
 
 instance FromJSON Namespace where
     parseJSON = withObject "object" $ \o -> do
         namespaceName <- o .: "name"
         namespaceDescription <- o .: "description"
+        namespacePrivileges <- o .: "privileges"
         return Namespace{..}
 
 instance ToJSON Namespace where
-    toJSON ns = object [ "name" .= (namespaceName ns), "description" .= (namespaceDescription ns) ]
+    toJSON Namespace{..} = object $ filterNulls [
+            "name" .= namespaceName,
+            "description" .= namespaceDescription,
+            "privileges" .= namespacePrivileges
+        ] 
 
 instance Resource Namespace where
     type Identifier Namespace = String
@@ -59,10 +66,10 @@ getNamespace :: Identifier Namespace -> MAS (Maybe Namespace)
 getNamespace = firstResourceWithIdentifier
 
 createNamespace :: String -> String -> MAS Namespace
-createNamespace name description = fmap envelopeFirst $ withEndpoint @Namespace $ post Namespace { namespaceName = name, namespaceDescription = description } 
+createNamespace name description = fmap envelopeFirst $ withEndpoint @Namespace $ post Namespace { namespaceName = name, namespaceDescription = description, namespacePrivileges = Nothing } 
 
 modifyNamespace :: String -> String -> String -> MAS Namespace
-modifyNamespace name newName newDescription = fmap envelopeFirst $ withEndpoint @Namespace $ withPath (pack name) $ patch Namespace { namespaceName = newName, namespaceDescription = newDescription } 
+modifyNamespace name newName newDescription = fmap envelopeFirst $ withEndpoint @Namespace $ withPath (pack name) $ patch Namespace { namespaceName = newName, namespaceDescription = newDescription, namespacePrivileges = Nothing } 
 
 deleteNamespaces :: [Identifier Namespace] -> MAS ()
 deleteNamespaces = deleteResourceWithIdentifiers_ @Namespace

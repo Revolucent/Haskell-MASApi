@@ -53,8 +53,8 @@ data Process = Process {
     processName :: String,
     processDescription :: String,
     processParameters :: [ProcessParameter],
-    processSteps :: [Step],
-    processPrivileges :: Privileges
+    processSteps :: Maybe [Step],
+    processPrivileges :: Maybe Privileges
 } deriving (Show)
 
 instance FromJSON Process where
