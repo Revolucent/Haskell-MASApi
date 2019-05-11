@@ -11,6 +11,7 @@ module Vendita.MAS.Entity (
 where
 
 import Data.Aeson
+import Data.Aeson.Types (Parser)
 import Data.Text (unpack)
 import Vendita.MAS.Core
 import Vendita.MAS.Entity.Class
@@ -46,15 +47,20 @@ instance (Extra x) => Resource (Entity x) where
     resourceDateUpdated = entityDateUpdated
     resourcePathSegment = extraPathSegment @x
 
+parseEntity :: forall x. (FromJSON x, Extra x) => Value -> Parser (Entity x)
+parseEntity value = parseObject value
+    where
+        parseObject = let name = unpack (extraPathSegment @x) in
+                        withObject name $ \o -> do
+                            entityName <- o .: "name"
+                            entityDescription <- o .: "description"
+                            entityUserOwner <- o .: "user_owner"
+                            entityDateCreated <- o .: "date_created"
+                            entityDateUpdated <- o .: "date_updated"
+                            entityPrivileges <- o .: "privileges"
+                            entityClass <- o .: "entity"
+                            entityExtra <- parseJSON value 
+                            return Entity{..}
+
 instance (FromJSON x, Extra x) => FromJSON (Entity x) where
-    parseJSON = let name = unpack (extraPathSegment @x) in
-                    withObject name $ \o -> do
-                        entityName <- o .: "name"
-                        entityDescription <- o .: "description"
-                        entityUserOwner <- o .: "user_owner"
-                        entityDateCreated <- o .: "date_created"
-                        entityDateUpdated <- o .: "date_updated"
-                        entityPrivileges <- o .: "privileges"
-                        entityClass <- o .: "entity"
-                        entityExtra <- parseJSON $ toJSON o 
-                        return Entity{..}
+    parseJSON = parseEntity 

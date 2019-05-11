@@ -12,6 +12,7 @@ module Vendita.MAS.Security.Privilege (
     GrantOperator(..),
     Operator(..),
     Privileges(..),
+    withClassPrivilege,
     withEntityPrivilege,
     withOperator
 )
@@ -90,6 +91,9 @@ instance FromJSON ClassPrivilege where
 
 instance ToJSON ClassPrivilege where
     toJSON = toJSON . map toLower . show 
+
+withClassPrivilege :: (MonadReader Connection m) => ClassPrivilege -> m a -> m a
+withClassPrivilege = withPath . pathSegment
 
 data ActualPrivileges a = ActualPrivileges {
     actualPrivilegesGranted :: a, 

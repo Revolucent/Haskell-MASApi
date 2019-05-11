@@ -1,12 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ExplicitForAll #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Main where 
 
@@ -15,6 +11,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Network.HTTP.Req
+import System.IO
 import Text.Printf
 import Vendita.MAS
 import Vendita.MAS.Diagnostics
@@ -31,6 +28,6 @@ investigate unsummarized = do
     resources <- listResource @r unsummarized
     liftIO $ if (length resources) > 0
         then forM_ resources print
-        else printf "No %ss found" (resourcePathSegment @r)
+        else hPrintf stderr "No %ss found." (resourcePathSegment @r)
 
-main = withServer defaultServer $ investigate @Type True 
+main = withServer defaultServer $ investigate @Form True 
