@@ -54,17 +54,24 @@ library
   build-depends:      base >=4.11 && <5, req, uri, aeson, aeson-pretty, bytestring, containers, data-default-class, hashable, monad-control, mtl, text, uuid, time, unordered-containers, http-client, http-types, regex-tdfa, exceptions, time, iso8601-time
   exposed-modules:    Vendita.MAS, Vendita.MAS.Diagnostics
   other-modules:      Vendita.MAS.Core,
-                      Vendita.MAS.Entities.Accounts,
-                      Vendita.MAS.Entities.Aliases,
-                      Vendita.MAS.Entities.Constants,
-                      Vendita.MAS.Entities.DataTypes,
-                      Vendita.MAS.Entities.Forms,
-                      Vendita.MAS.Entities.Invocations,
-                      Vendita.MAS.Entities.Namespaces,
-                      Vendita.MAS.Entities.Processes,
-                      Vendita.MAS.Entities.Prototypes,
-                      Vendita.MAS.Entities.Schedules,
-                      Vendita.MAS.Security
+                      Vendita.MAS.Entity,
+                      Vendita.MAS.Entity.Account,
+                      Vendita.MAS.Entity.Alias,
+                      Vendita.MAS.Entity.Class,
+                      Vendita.MAS.Entity.Constant,
+                      Vendita.MAS.Entity.Exception,
+                      Vendita.MAS.Entity.Extra,
+                      Vendita.MAS.Entity.Form,
+                      Vendita.MAS.Entity.Namespace,
+                      Vendita.MAS.Entity.Process,
+                      Vendita.MAS.Entity.Prototype,
+                      Vendita.MAS.Entity.Schedule,
+                      Vendita.MAS.Entity.Type,
+                      Vendita.MAS.Invocation,
+                      Vendita.MAS.Resource,
+                      Vendita.MAS.Security,
+                      Vendita.MAS.Security.Role,
+                      Vendita.MAS.Security.Privilege
   default-language:   Haskell2010
 
 executable MAS 

@@ -1,153 +1,45 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Vendita.MAS.Security (
-    ActualClassPrivileges(..),
-    ClassPrivileges(..),
-    Group(..),
-    Operator(..),
-    Privilege(..),
-    User(..),
-) where
+--    modifyEntityPrivilege,
+--    modifyGroupEntityPrivilege,
+--    modifyGroupOwner,
+--    modifyOwner,
+--    modifyUserEntityPrivilege,
+--    modifyUserOwner
+)
+where
 
 import Data.Aeson
-import Data.Aeson.Types
-import Data.Char (toLower, toUpper)
-import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
-import Data.Set (Set)
-import Data.Text (pack, unpack)
-import Text.Read (readMaybe)
 import Vendita.MAS.Core
+import Vendita.MAS.Entity
+import Vendita.MAS.Resource
+import Vendita.MAS.Security.Privilege
+import Vendita.MAS.Security.Role
 
-data User = User {
-    userName :: String,
-    userDescription :: String,
-    userGroups :: [Identifier Group], -- member_of
-    userPrivileges :: Maybe ClassPrivileges
-} deriving (Read)
+{-
+modifyOwner :: forall e r. (Resource r, Role r, ToJSON (Identifier r), Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier r -> Identifier e -> MAS e
+modifyOwner role name = withResource @e $ withPath "owner" $ withIdentifier name $ patch $ object [ "name" .= role, "is_group" .= roleIsGroup @r ]
 
-instance Resource User where
-    type Identifier User = String
-    resourceIdentifier = userName
-    resourcePathSegment = "user"
+modifyUserOwner :: forall e. (Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier User -> Identifier e -> MAS e
+modifyUserOwner = modifyOwner @e @User
 
-instance ToJSON User where
-    toJSON User{..} = object [
-            "name" .= userName,
-            "description" .= userDescription,
-            "member_of" .= userGroups,
-            "class_privileges" .= userPrivileges
-        ]
+modifyGroupOwner :: forall e. (Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier Group -> Identifier e -> MAS e
+modifyGroupOwner = modifyOwner @e @Group
 
-instance FromJSON User where
-    parseJSON = withObject "User" $ \o -> do
-        userName <- o .: "name"
-        userDescription <- o .: "description"
-        userGroups <- o .: "member_of"
-        userPrivileges <- o .: "class_privileges"
-        return User{..}
+modifyEntityPrivilege :: forall r e o. (Resource r, Role r, Pathed (Identifier r), Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier r -> o -> EntityPrivilege -> Identifier e -> MAS e 
+modifyEntityPrivilege role op privilege entity = withResource @r $ withIdentifier role $ withOperator op $ withEntityPrivilege privilege $ withIdentifier entity $ patch $ object [
+        "cls" .= (entityResourceClass @e)
+    ]
 
-data Group = Group {
-    groupName :: String,
-    groupDescription :: String,
-    groupUsers :: [Identifier User],
-    groupParentGroups :: [Identifier Group], -- member_of
-    groupGroups :: [Identifier Group], -- groups
-    groupPrivileges :: Maybe ClassPrivileges
-} deriving (Read)
+modifyUserEntityPrivilege :: forall e o. (Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier User -> o -> EntityPrivilege -> Identifier e -> MAS e
+modifyUserEntityPrivilege = modifyEntityPrivilege @User @e
 
-instance Resource Group where
-    type Identifier Group = String
-    resourceIdentifier = groupName
-    resourcePathSegment = "group"
-
-instance ToJSON Group where
-    toJSON Group{..} = object [
-            "name" .= groupName,
-            "description" .= groupDescription,
-            "users" .= groupUsers,
-            "groups" .= groupParentGroups,
-            "member_of" .= groupGroups,
-            "class_privileges" .= groupPrivileges
-        ]
-
-instance FromJSON Group where
-    parseJSON = withObject "Group" $ \o -> do
-        groupName <- o .: "name"
-        groupDescription <- o .: "description"
-        groupUsers <- o .: "users"
-        groupParentGroups <- o .: "groups"
-        groupGroups <- o .: "member_of"
-        groupPrivileges <- o .: "class_privileges"
-        return Group{..}
-
-data Privilege = EXECUTE | READ | WRITE | CREATE deriving (Eq, Ord, Enum, Read, Show)
-
-instance EnumerationKey Privilege
-
-instance ToJSON Privilege where
-    toJSON = enumerationToJSON
-
-instance ToJSONKey Privilege where
-    toJSONKey = enumerationToJSONKey
-   
-instance FromJSON Privilege where
-    parseJSON = enumerationFromJSON
-
-instance FromJSONKey Privilege where
-    fromJSONKey = enumerationFromJSONKey
-
-data Operator = GRANT | ALLOW | DENY | REVOKE deriving (Eq, Ord, Enum, Read, Show)
-
-instance EnumerationKey Operator
-
-instance ToJSON Operator where
-    toJSON = enumerationToJSON
-
-instance ToJSONKey Operator where
-    toJSONKey = enumerationToJSONKey
-   
-instance FromJSON Operator where
-    parseJSON = enumerationFromJSON
-
-instance FromJSONKey Operator where
-    fromJSONKey = enumerationFromJSONKey
-
-data ActualClassPrivileges = ActualClassPrivileges {
-    actualClassPrivilegesGranted :: Map Entity (Set Privilege),
-    actualClassPrivilegesDenied :: Map Entity (Set Privilege)
-} deriving (Read)
-
-instance ToJSON ActualClassPrivileges where
-    toJSON ActualClassPrivileges{..} = object [
-            "granted" .= actualClassPrivilegesGranted,
-            "denied" .= actualClassPrivilegesDenied
-        ]
-
-instance FromJSON ActualClassPrivileges where
-    parseJSON = withObject "ActualClassPrivileges" $ \o -> do
-        actualClassPrivilegesGranted <- o .: "granted"
-        actualClassPrivilegesDenied <- o .: "denied"
-        return ActualClassPrivileges{..}
-
-data ClassPrivileges = ClassPrivileges {
-    actualClassPrivileges :: ActualClassPrivileges,
-    effectiveClassPrivileges :: Map Entity (Set Privilege)
-} deriving (Read)
-
-instance ToJSON ClassPrivileges where
-    toJSON ClassPrivileges{..} = object [
-            "actual" .= actualClassPrivileges,
-            "effective" .= effectiveClassPrivileges
-        ]
-
-instance FromJSON ClassPrivileges where
-    parseJSON = withObject "ClassPrivileges" $ \o -> do
-        actualClassPrivileges <- o .: "actual"
-        effectiveClassPrivileges <- o .: "effective"
-        return ClassPrivileges{..}
+modifyGroupEntityPrivilege :: forall e o. (Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier Group -> o -> EntityPrivilege -> Identifier e -> MAS e
+modifyGroupEntityPrivilege = modifyEntityPrivilege @Group @e
+-}
