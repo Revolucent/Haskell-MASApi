@@ -9,12 +9,14 @@
 module Vendita.MAS.Invocation (
     Invocation(..),
     InvocationParameters(..),
+    InvocationStatus(..),
     getInvocation,
     invoke,
     invokeNow,
     listInvocations,
     listInvocationsWithRange,
     parameter,
+    parameterS,
     withInvocationDateRange,
     withInvocationRange
 )
@@ -96,6 +98,9 @@ instance ToJSON InvocationParameters where
 
 parameter :: (ToJSON v) => String -> v -> InvocationParameters
 parameter name value = InvocationParameters (Map.fromList [(name, toJSON value)])
+
+parameterS :: String -> String -> InvocationParameters
+parameterS = parameter
 
 getInvocation = getResource @Invocation
 

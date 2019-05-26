@@ -6,40 +6,31 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Vendita.MAS.Security (
---    modifyEntityPrivilege,
---    modifyGroupEntityPrivilege,
---    modifyGroupOwner,
---    modifyOwner,
---    modifyUserEntityPrivilege,
---    modifyUserOwner
+    modifyClassPrivilege,
+    modifyEntityPrivilege,
+    modifyEntityOwner
 )
 where
 
 import Data.Aeson
+import Network.HTTP.Req (NoReqBody(..), PATCH(..))
 import Vendita.MAS.Core
 import Vendita.MAS.Entity
+import Vendita.MAS.Entity.Class
 import Vendita.MAS.Resource
 import Vendita.MAS.Security.Privilege
 import Vendita.MAS.Security.Role
 
-{-
-modifyOwner :: forall e r. (Resource r, Role r, ToJSON (Identifier r), Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier r -> Identifier e -> MAS e
-modifyOwner role name = withResource @e $ withPath "owner" $ withIdentifier name $ patch $ object [ "name" .= role, "is_group" .= roleIsGroup @r ]
-
-modifyUserOwner :: forall e. (Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier User -> Identifier e -> MAS e
-modifyUserOwner = modifyOwner @e @User
-
-modifyGroupOwner :: forall e. (Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier Group -> Identifier e -> MAS e
-modifyGroupOwner = modifyOwner @e @Group
-
-modifyEntityPrivilege :: forall r e o. (Resource r, Role r, Pathed (Identifier r), Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier r -> o -> EntityPrivilege -> Identifier e -> MAS e 
-modifyEntityPrivilege role op privilege entity = withResource @r $ withIdentifier role $ withOperator op $ withEntityPrivilege privilege $ withIdentifier entity $ patch $ object [
-        "cls" .= (entityResourceClass @e)
+modifyEntityOwner :: forall e r. (Resource e, EntityResource e, Pathed (Identifier e), FromJSON e, Resource r, Role r, ToJSON (Identifier r)) => Identifier e -> Identifier r -> MAS e 
+modifyEntityOwner name role = fmap envelopeFirst $ withEndpoint @e $ withPath "owner" $ withIdentifier name $ patch $ object [
+        "role" .= role,
+        "is_group" .= roleIsGroup @r
     ]
 
-modifyUserEntityPrivilege :: forall e o. (Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier User -> o -> EntityPrivilege -> Identifier e -> MAS e
-modifyUserEntityPrivilege = modifyEntityPrivilege @User @e
+modifyEntityPrivilege :: forall r e o. (Resource r, Role r, Pathed (Identifier r), Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier r -> o -> EntityPrivilege -> Identifier e -> MAS e 
+modifyEntityPrivilege role op priv name = fmap envelopeFirst $ withEndpoint @r $ withIdentifier role $ withOperator op $ withEntityPrivilege priv $ withIdentifier name $ patch $ object [
+        "cls" .= resourcePathSegment @e
+    ]
 
-modifyGroupEntityPrivilege :: forall e o. (Operator o, Resource e, EntityResource e, FromJSON e, Pathed (Identifier e)) => Identifier Group -> o -> EntityPrivilege -> Identifier e -> MAS e
-modifyGroupEntityPrivilege = modifyEntityPrivilege @Group @e
--}
+modifyClassPrivilege :: forall r o. (Resource r, Role r, Pathed (Identifier r), FromJSON r, Operator o) => Identifier r -> o -> ClassPrivilege -> Class -> MAS r
+modifyClassPrivilege role op priv c = fmap envelopeFirst $ withEndpoint @r $ withIdentifier role $ withOperator op $ withClassPrivilege priv $ withPath (pathSegment c) $ mas PATCH NoReqBody

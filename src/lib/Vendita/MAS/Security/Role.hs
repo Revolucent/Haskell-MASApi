@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -8,7 +9,17 @@
 module Vendita.MAS.Security.Role (
     Group(..),
     Role(..),
-    User(..)
+    User(..),
+    createGroup,
+    createUser,
+    deleteGroup,
+    deleteUser,
+    getGroup,
+    getUser,
+    listGroups,
+    listUsers,
+    modifyMembership,
+    modifyUser
 ) where
 
 import Data.Aeson
@@ -58,6 +69,26 @@ instance FromJSON User where
         userDateUpdated <- o .: "date_updated"
         return User{..}
 
+getUser = getResource @User
+deleteUser = deleteResource @User
+listUsers = listResource @User
+
+createRole :: forall r. (Role r, Resource r, FromJSON r, ToJSON (Identifier r)) => Identifier r -> Maybe String -> String -> [Identifier Group] -> MAS r
+createRole name password description groups = createResource @r $ object $ filterNulls [
+        "name" .= name,
+        "password" .= password,
+        "description" .= description,
+        "groups" .= groups
+    ]
+
+createUser name password description groups = createRole @User name (Just password) description groups
+
+modifyUser :: Identifier User -> Maybe String -> Maybe String -> MAS User
+modifyUser name password description = modifyResource @User name $ object $ filterNulls [
+        "password" .= password,
+        "description" .= description
+    ]
+
 data Group = Group {
     groupName :: String,
     groupDescription :: String,
@@ -91,3 +122,13 @@ instance FromJSON Group where
         groupDateCreated <- o .: "date_created"
         groupDateUpdated <- o .: "date_updated"
         return Group{..}
+
+getGroup = getResource @Group
+deleteGroup = deleteResource @Group
+listGroups = listResource @Group
+createGroup name description groups = createRole @Group name Nothing description groups
+
+modifyMembership :: forall r. (Role r, Resource r, FromJSON r, Pathed (Identifier r)) => Identifier r -> GrantOperator -> [Identifier Group] -> MAS r
+modifyMembership role op groups = fmap envelopeFirst $ withEndpoint @r $ withIdentifier role $ withOperator op $ patch $ object [
+        "groups" .= groups
+    ] 

@@ -3,6 +3,7 @@ module Vendita.MAS (
     module Vendita.MAS.Entity,
     module Vendita.MAS.Entity.Account,
     module Vendita.MAS.Entity.Alias,
+    module Vendita.MAS.Entity.Class,
     module Vendita.MAS.Entity.Constant,
     module Vendita.MAS.Entity.Exception,
     module Vendita.MAS.Entity.Form,
@@ -23,6 +24,7 @@ import Vendita.MAS.Core
 import Vendita.MAS.Entity
 import Vendita.MAS.Entity.Account
 import Vendita.MAS.Entity.Alias
+import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Constant
 import Vendita.MAS.Entity.Exception
 import Vendita.MAS.Entity.Form

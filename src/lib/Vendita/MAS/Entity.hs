@@ -6,7 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Vendita.MAS.Entity (
-    Entity(..)
+    Entity(..),
+    EntityResource(..)
 ) 
 where
 

@@ -19,7 +19,6 @@
 module Vendita.MAS.Core
 (
     Connection,
-    Defaultable (..),
     EnumerationKey(..),
     Envelope (..),
     MAS,
@@ -251,12 +250,6 @@ withOption :: (MonadReader Connection m) => Option 'Https -> m a -> m a
 withOption option = local setOption
     where
         setOption (url, options) = (url, options <> option)
-
-class (Monad m) => Defaultable m where
-    (??) :: m a -> a -> a
-
-instance Defaultable Maybe where
-    m ?? a = fromMaybe a m 
 
 raw :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS ByteString 
 raw method body = do
