@@ -5,9 +5,11 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Vendita.MAS.Entity.Account (
+    Account,
     AccountAttribute(..),
     AccountExtra(..),
-    Account,
+    AccountExtraSpecial(..),
+    accountURL,
     getAccount,
     listAccounts,
     modifyAccount
@@ -16,23 +18,38 @@ module Vendita.MAS.Entity.Account (
 where
 
 import Data.Aeson
+import Data.Char (isSpace, toLower)
+import Data.List (dropWhile, dropWhileEnd)
 import Data.Map (Map)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import Text.Printf (printf)
 import Vendita.MAS.Core
 import Vendita.MAS.Entity
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Extra
 import Vendita.MAS.Resource
 
-{-
-special : object
--}
+data AccountExtraSpecial = AccountExtraSpecial {
+    accountSpecialDatabase :: Maybe String,
+    accountSpecialMode :: Maybe String
+} deriving (Show)
+
+instance FromJSON AccountExtraSpecial where
+    parseJSON = withObject "special" $ \o -> do
+        accountSpecialDatabase <- o .:? "database"
+        accountSpecialMode <- o .:? "mode"
+        return AccountExtraSpecial{..}
+
+instance ToJSON AccountExtraSpecial where
+    toJSON AccountExtraSpecial{..} = object $ filterNulls [ "database" .= accountSpecialDatabase ]
 
 data AccountExtra = AccountExtra {
     accountAddress :: String,
+    accountUser :: String,
+    accountUserKey :: Maybe String,
     accountProtocol :: String,
-    accountSpecial :: Object 
+    accountSpecial :: AccountExtraSpecial 
 } deriving (Show)
 
 instance Extra AccountExtra where
@@ -41,6 +58,8 @@ instance Extra AccountExtra where
 instance FromJSON AccountExtra where
     parseJSON = withObject "account" $ \o -> do
         accountAddress <- o .: "address"
+        accountUser <- o .: "user"
+        accountUserKey <- o .:? "user_key"
         accountProtocol <- o .: "protocol"
         accountSpecial <- o .: "special"
         return AccountExtra{..}
@@ -56,7 +75,8 @@ data AccountAttribute = AccountRename String |
                         AccountUserKey String |
                         AccountUser String |  
                         AccountAddress String |
-                        AccountPort Int
+                        AccountPort Int |
+                        AccountSpecial AccountExtraSpecial
 
 instance NamedAttribute AccountAttribute where 
     attributeName (AccountRename _) = "rename"
@@ -66,6 +86,7 @@ instance NamedAttribute AccountAttribute where
     attributeName (AccountUser _) = "user"
     attributeName (AccountAddress _) = "address"
     attributeName (AccountPort _) = "port"
+    attributeName (AccountSpecial _) = "special"
 
 instance ToJSON AccountAttribute where
     toJSON (AccountRename rename) = toJSON rename
@@ -75,6 +96,17 @@ instance ToJSON AccountAttribute where
     toJSON (AccountUser user) = toJSON user
     toJSON (AccountAddress address) = toJSON address
     toJSON (AccountPort port) = toJSON port
+    toJSON (AccountSpecial special) = toJSON special
 
 modifyAccount :: Identifier Account -> [AccountAttribute] -> MAS Account
 modifyAccount = modifyResourceAttributes
+
+accountURL :: Account -> String
+accountURL = accountExtraURL . entityExtra 
+    where
+        accountExtraURL AccountExtra{..} = printf "%s://%s:****@%s%s" (map toLower accountProtocol) accountUser accountAddress (accountExtraSpecialDatabase accountSpecial)
+        accountExtraSpecialDatabase :: AccountExtraSpecial -> String 
+        accountExtraSpecialDatabase AccountExtraSpecial{..} = case accountSpecialDatabase of 
+            Just database -> let trimmedabase = (dropWhile isSpace . dropWhileEnd isSpace) database in 
+                                if (length trimmedabase) == 0 then "" else printf "/%s" trimmedabase
+            Nothing -> ""

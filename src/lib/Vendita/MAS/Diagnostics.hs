@@ -1,6 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Vendita.MAS.Diagnostics (
+    allp,
+    anyp,
     monitor,
     printPretty,
     processHasParameter,
@@ -12,6 +14,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Aeson (ToJSON)
 import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.Foldable (Foldable, toList)
 import Data.UUID (UUID)
 import qualified Data.ByteString.Lazy as BS
 import Text.Printf
@@ -62,3 +65,11 @@ monitor process parameters = monitor' $ Invoke process parameters
                 FAILED -> printInvocation
                 _ -> monitor' m
 
+allp :: [a -> Bool] -> a -> Bool
+allp [] _ = True
+allp (test:tests) a = (test a) && (allp tests a)
+
+anyp :: [a -> Bool] -> a -> Bool
+anyp [] _ = True 
+anyp (test:[]) a = test a
+anyp (test:tests) a = (test a) || (anyp tests a)

@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Vendita.MAS.Entity.Form (
     FormExtra(..),
-    Form
+    Form,
+    getForm
 )
 
 where
@@ -32,3 +34,5 @@ instance FromJSON FormExtra where
         return FormExtra{..}
 
 type Form = Entity FormExtra
+
+getForm = getResource @Form
