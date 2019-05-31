@@ -9,7 +9,11 @@ module Vendita.MAS.Entity.Account (
     AccountAttribute(..),
     AccountExtra(..),
     AccountExtraSpecial(..),
+    NewAccount(..),
     accountURL,
+    createAccount,
+    defaultAccountSpecial,
+    deleteAccount,
     getAccount,
     listAccounts,
     modifyAccount
@@ -42,7 +46,12 @@ instance FromJSON AccountExtraSpecial where
         return AccountExtraSpecial{..}
 
 instance ToJSON AccountExtraSpecial where
-    toJSON AccountExtraSpecial{..} = object $ filterNulls [ "database" .= accountSpecialDatabase ]
+    toJSON AccountExtraSpecial{..} = object $ filterNulls [ "database" .= accountSpecialDatabase, "mode" .= accountSpecialMode ]
+
+defaultAccountSpecial = AccountExtraSpecial {
+        accountSpecialDatabase = Nothing,
+        accountSpecialMode = Nothing
+    }
 
 data AccountExtra = AccountExtra {
     accountAddress :: String,
@@ -98,8 +107,36 @@ instance ToJSON AccountAttribute where
     toJSON (AccountPort port) = toJSON port
     toJSON (AccountSpecial special) = toJSON special
 
+data NewAccount = NewAccount {
+    newAccountName :: String,
+    newAccountDescription :: String,
+    newAccountProtocol :: String,
+    newAccountAddress :: String,
+    newAccountPort :: Maybe Int,
+    newAccountUser :: String,
+    newAccountUserKey :: String,
+    newAccountSpecial :: AccountExtraSpecial
+} deriving (Show)
+
+instance ToJSON NewAccount where
+    toJSON NewAccount{..} = object $ filterNulls [
+            "name" .= newAccountName,
+            "description" .= newAccountDescription,
+            "protocol" .= newAccountProtocol,
+            "address" .= newAccountAddress,
+            "port" .= newAccountPort,
+            "user" .= newAccountUser,
+            "user_key" .= newAccountUserKey,
+            "special" .= newAccountSpecial
+        ]
+
+createAccount :: NewAccount -> MAS Account
+createAccount account = createResource account
+
 modifyAccount :: Identifier Account -> [AccountAttribute] -> MAS Account
 modifyAccount = modifyResourceAttributes
+
+deleteAccount = deleteResource @Account
 
 accountURL :: Account -> String
 accountURL = accountExtraURL . entityExtra 

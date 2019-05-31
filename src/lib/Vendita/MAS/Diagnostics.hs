@@ -20,6 +20,7 @@ import qualified Data.ByteString.Lazy as BS
 import Text.Printf
 import Vendita.MAS.Core
 import Vendita.MAS.Entity
+import Vendita.MAS.Entity.Meta
 import Vendita.MAS.Entity.Process
 import Vendita.MAS.Invocation
 import Vendita.MAS.Resource
@@ -36,7 +37,7 @@ processHasParameterWithType :: String -> Process -> Bool
 processHasParameterWithType dataType = processHasParameter $ \parameter -> (processParameterType parameter) == dataType 
 
 processHasParameterWithEditor :: String -> Process -> Bool
-processHasParameterWithEditor editor = processHasParameter $ \parameter -> case processParameterMetaEditor (processParameterMeta parameter) of
+processHasParameterWithEditor editor = processHasParameter $ \parameter -> case metaEditor (processParameterMeta parameter) of
     Just metaEditor -> editor == metaEditor
     _ -> False
 
