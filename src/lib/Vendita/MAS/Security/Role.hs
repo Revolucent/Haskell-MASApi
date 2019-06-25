@@ -46,9 +46,6 @@ data User = User {
 instance Resource User where
     type Identifier User = String
     resourceIdentifier = userName
-    resourceUserOwner = userName
-    resourceDateCreated = userDateCreated
-    resourceDateUpdated = userDateUpdated
     resourcePathSegment = "user"
 
 instance NamedResource User where
@@ -101,9 +98,6 @@ data Group = Group {
 instance Resource Group where
     type Identifier Group = String 
     resourceIdentifier = groupName
-    resourceUserOwner = groupName
-    resourceDateCreated = groupDateCreated
-    resourceDateUpdated = groupDateUpdated
     resourcePathSegment = "group"
 
 instance NamedResource Group where

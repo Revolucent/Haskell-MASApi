@@ -24,44 +24,55 @@ module Vendita.MAS.Core
     MAS,
     MASTime(..),
     Server (..),
-    withServer,
+    askServer,
     defaultPageSize,
     defaultResponseTimeout,
-    filterNulls,
-    handleHttpStatus,
-    handleHttpException,
-    handleHttpExceptionJustReturn,
-    handleHttpStatusJustReturn,
-    handleHttp404JustReturn,
-    list,
-    first,
+    delete_,
     envelopeFirst,
-    mas,
-    mas_,
-    raw,
+    filterNulls,
+    first,
     get,
     get_,
-    post,
-    post_,
+    handleHttp404,
+    handleHttp404JustReturn,
+    handleHttpException,
+    handleHttpExceptionJustReturn,
+    handleHttpStatus,
+    handleHttpStatusJustReturn,
+    list,
+    mapServer,
+    mapServers,
+    mas,
+    mas_,
+    maybe404,
+    maybeHttpException,
+    maybeHttpStatus,
+    pageSize,
     patch,
     patch_,
+    post,
+    post_,
     put,
     put_,
-    delete_,
-    pageSize,
+    raw,
+    toMASTime,
+    when404,
+    when404_,
     withConnection,
     withEnumeration,
+    withOption,
     withPage,
     withPageSize,
     withPath,
-    withOption,
-    toMASTime
+    withServer,
+    withServers
 )
 where
 
-import Control.Applicative (empty)
+import Control.Applicative (empty, liftA2)
 import Control.Exception.Base (Exception, throwIO)
 import qualified Control.Exception.Base as E
+import Control.Monad (void)
 import Control.Monad.Catch
 import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
@@ -77,6 +88,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text, pack, isInfixOf, strip, unpack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time
 import Data.Time.Format
 import Data.Typeable
@@ -138,13 +150,27 @@ filterNulls (p:ps) = (p:(filterNulls ps))
 
 data Server = Server { serverUrl :: Url 'Https, serverUser :: ByteString, serverPassword :: ByteString } deriving (Eq, Show)
 
-type Connection = (Url 'Https, Option Https)
+instance FromJSON Server where
+    parseJSON = withObject "server" $ \o -> do
+        path <- o .: "path"
+        domain <- o .: "domain"
+        let serverUrl = (https domain) /: path
+        serverUser <- encodeUtf8 <$> o .: "user"
+        serverPassword <- encodeUtf8 <$> o .: "password"
+        return Server{..}
+
+type Connection = (Server, Url 'Https, Option Https)
 
 newtype MAS a = MAS (ReaderT Connection IO a) deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch)
 
 instance MonadReader Connection MAS where
     ask = MAS ask
     local t (MAS m) = ask >>= liftIO . runReaderT m . t 
+    
+askServer :: MonadReader Connection m => m Server
+askServer = do 
+    (server, _, _) <- ask
+    return server
 
 instance MonadHttp MAS where
     handleHttpException = throwM 
@@ -156,7 +182,16 @@ withServer :: (MonadIO m) => Server -> MAS a -> m a
 withServer server m = do
     let accept = header "Accept" "application/json"
     let auth = basicAuth (serverUser server) (serverPassword server)
-    withConnection (serverUrl server, (accept <> auth)) m
+    withConnection (server, serverUrl server, (accept <> auth)) m
+
+withServers :: (MonadIO m, Traversable t) => t Server -> MAS a -> m (t a) 
+withServers servers m = forM servers ((flip withServer) m) 
+
+mapServer :: (MonadIO m) => MAS a -> Server -> m a
+mapServer = flip withServer
+
+mapServers :: (MonadIO m, Traversable t) => MAS a -> t Server -> m (t a) 
+mapServers action = mapM (mapServer action)
 
 data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } deriving (Show)
 
@@ -194,6 +229,21 @@ handleHttp404 = handleHttpStatus_ [T.status404]
 handleHttp404JustReturn :: (MonadThrow m) => a -> HttpException -> m a
 handleHttp404JustReturn = handleHttp404 . return 
 
+maybeHttpStatus :: (Foldable t, MonadCatch m) => t T.Status -> m a -> m (Maybe a)
+maybeHttpStatus statuses attempt = catch (Just <$> attempt) (handleHttpStatusJustReturn statuses Nothing)
+
+maybe404 :: (MonadCatch m) => m a -> m (Maybe a)
+maybe404 = maybeHttpStatus [T.status404]
+
+maybeHttpException :: (MonadCatch m) => m a -> m (Maybe a)
+maybeHttpException attempt = catch (Just <$> attempt) (handleHttpExceptionJustReturn Nothing)
+
+when404 :: (MonadCatch m) => m a -> m a -> m a
+when404 attempt failure = catch attempt (handleHttp404 failure)
+
+when404_ :: (MonadCatch m) => m a -> m b -> m ()
+when404_ attempt failure = catch (void attempt) (handleHttp404 (void failure))
+
 second :: Int
 second = 1000000
 
@@ -216,9 +266,7 @@ list makeRequest = do
         else (contents ++) <$> combinePages [2..pageCount]
     where
         combinePages [] = return []
-        combinePages (p:ps) = do 
-            contents <- envelopeContents <$> withPage p makeRequest
-            (contents ++) <$> combinePages ps
+        combinePages (p:ps) = liftA2 (++) (envelopeContents <$> withPage p makeRequest) (combinePages ps)
 
 fail404 :: (MonadFail f) => f a
 fail404 = Fail.fail "NOT FOUND"
@@ -244,26 +292,26 @@ withPageSize = withOption . ("page_size" =:)
 withPath :: (MonadReader Connection m) => Text -> m a -> m a
 withPath path = local setPath
     where
-        setPath (url, options) = (url /: path, options)
+        setPath (server, url, options) = (server, url /: path, options)
 
 withOption :: (MonadReader Connection m) => Option 'Https -> m a -> m a
 withOption option = local setOption
     where
-        setOption (url, options) = (url, options <> option)
+        setOption (server, url, options) = (server, url, options <> option)
 
 raw :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS ByteString 
 raw method body = do
-    (url, options) <- ask
+    (_, url, options) <- ask
     fmap responseBody $ req method url body bsResponse options
 
 mas :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body, FromJSON a) => method -> body -> MAS a
 mas method body = do
-    (url, options) <- ask
+    (_, url, options) <- ask
     fmap responseBody $ req method url body jsonResponse options
 
 mas_ :: (HttpBodyAllowed (AllowsBody method) (ProvidesBody body), HttpMethod method, HttpBody body) => method -> body -> MAS () 
 mas_ method body = do
-    (url, options) <- ask
+    (_, url, options) <- ask
     req method url body ignoreResponse options >> return ()
         
 get :: (FromJSON a) => MAS a

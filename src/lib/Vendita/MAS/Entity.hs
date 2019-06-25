@@ -43,9 +43,6 @@ instance NamedResource (Entity x) where
 instance (Extra x) => Resource (Entity x) where
     type Identifier (Entity x) = String
     resourceIdentifier = entityName
-    resourceUserOwner = entityUserOwner
-    resourceDateCreated = entityDateCreated
-    resourceDateUpdated = entityDateUpdated
     resourcePathSegment = extraPathSegment @x
 
 parseEntity :: forall x. (FromJSON x, Extra x) => Value -> Parser (Entity x)

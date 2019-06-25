@@ -1,17 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Vendita.MAS.Entity.Alias (
     AliasExtra(..),
-    Alias
+    Alias,
+    createAlias,
+    deleteAlias,
+    getAlias,
+    listAliases
 )
 
 where
 
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson
+import Vendita.MAS.Core
 import Vendita.MAS.Entity
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Extra
+import Vendita.MAS.Resource
+import Vendita.MAS.Diagnostics (printPretty)
 
 data AliasExtra = AliasExtra {
     aliasedName :: String,
@@ -28,3 +37,14 @@ instance FromJSON AliasExtra where
         return AliasExtra{..}
 
 type Alias = Entity AliasExtra
+
+deleteAlias = deleteResource @Alias
+getAlias = getResource @Alias
+listAliases = listResource @Alias
+
+createAlias :: String -> String -> Class -> String -> MAS Alias
+createAlias name description cls to = createResource $ object [
+        "name" .= to, -- Yes, really. It's reversed.
+        "description" .= description,
+        "alias" .= name -- WTF?
+    ] 

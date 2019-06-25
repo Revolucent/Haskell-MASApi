@@ -19,7 +19,8 @@ import Vendita.MAS.Resource
 data TypeExtra = TypeExtra {
     typeProtocols :: Maybe [String],
     typeDefinition :: Maybe String,
-    typeEnumerations :: Maybe [Value]
+    typeEnumerations :: Maybe [Value],
+    typePatterns :: Maybe [String]
 } deriving (Show)
 
 instance Extra TypeExtra where
@@ -30,6 +31,7 @@ instance FromJSON TypeExtra where
         typeProtocols <- o .: "protocol"
         typeDefinition <- o .: "definition"
         typeEnumerations <- o .: "enumerations"
+        typePatterns <- o .:? "pattern"
         return TypeExtra{..}
 
 type Type = Entity TypeExtra

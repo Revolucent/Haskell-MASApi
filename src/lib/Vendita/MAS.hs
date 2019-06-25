@@ -1,4 +1,5 @@
 module Vendita.MAS (
+    module Vendita.MAS.Config,
     module Vendita.MAS.Core,
     module Vendita.MAS.Entity,
     module Vendita.MAS.Entity.Account,
@@ -22,6 +23,7 @@ module Vendita.MAS (
 ) 
 where
 
+import Vendita.MAS.Config
 import Vendita.MAS.Core
 import Vendita.MAS.Entity
 import Vendita.MAS.Entity.Account

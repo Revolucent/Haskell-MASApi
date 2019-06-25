@@ -7,8 +7,10 @@ module Vendita.MAS.Entity.Process (
     Process,
     ProcessExtra(..),
     ProcessParameter(..),
+    deleteProcess,
     getProcess,
-    listProcesses
+    listProcesses,
+    processParameterMetaEditor
 )
 
 where
@@ -31,6 +33,9 @@ data ProcessParameter = ProcessParameter {
     processParameterDefault :: Maybe String,
     processParameterMeta :: Meta 
 } deriving (Show)
+
+processParameterMetaEditor :: ProcessParameter -> Maybe String
+processParameterMetaEditor = metaEditor . processParameterMeta
 
 instance Eq ProcessParameter where
     a == b = (processParameterName a) == (processParameterName b)
@@ -61,5 +66,6 @@ instance FromJSON ProcessExtra where
 
 type Process = Entity ProcessExtra
 
+deleteProcess = deleteResource @Process
 getProcess = getResource @Process
 listProcesses = listResource @Process

@@ -1,0 +1,39 @@
+# This is a sample .mas.yaml file.
+# Copy it to ~, make it valid, and it will work.
+
+server: &server
+  path: mas
+  user: invalid 
+  password: invalid 
+
+servers:
+  mas3cloud10:
+    <<: *server
+    domain: mas3cloud10.somewhere.com
+  mas3cloud11:
+    <<: *server
+    domain: mas3cloud11.somewhere.com
+  mas3cloud12:
+    <<: *server
+    domain: mas3cloud12.somewhere.com
+  mas3cloud13:
+    <<: *server
+    domain: mas3cloud13.somewhere.com
+  mas3cloud14:
+    <<: *server
+    domain: mas3cloud14.somewhere.com
+  mas3cloud15:
+    <<: *server
+    domain: mas3cloud15.somewhere.com
+  mas3cloud17:
+    <<: *server
+    domain: mas3cloud17.somewhere.com
+
+# Add or remove named servers here.
+actives:
+  - mas3cloud11
+  - mas3cloud12
+  - mas3cloud13
+  - mas3cloud14
+  - mas3cloud15
+  - mas3cloud17

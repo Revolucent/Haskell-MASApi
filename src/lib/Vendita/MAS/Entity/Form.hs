@@ -6,6 +6,8 @@ module Vendita.MAS.Entity.Form (
     Form,
     FormExtra(..),
     FormValue(..),
+    createForm,
+    deleteForm,
     getForm,
     listForms
 )
@@ -13,7 +15,10 @@ module Vendita.MAS.Entity.Form (
 where
 
 import Data.Aeson
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
+import qualified Data.Set as Set
+import Vendita.MAS.Core
 import Vendita.MAS.Entity
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Extra
@@ -51,7 +56,7 @@ data FormExtra = FormExtra {
     formIsCompleted :: Bool,
     formPrototypeName :: Identifier Prototype, 
     formPrototypeVersion :: Int,
-    formValues :: Maybe (Set FormValue)
+    formValues :: Set FormValue 
 } deriving (Show)
 
 instance Extra FormExtra where
@@ -62,10 +67,14 @@ instance FromJSON FormExtra where
         formIsCompleted <- o .: "is_completed"
         formPrototypeName <- o .: "prototype"
         formPrototypeVersion <- o .: "version"
-        formValues <- o .: "values"
+        formValues <- fromMaybe Set.empty <$> o .: "values"
         return FormExtra{..}
 
 type Form = Entity FormExtra
 
 getForm = getResource @Form
 listForms = listResource @Form
+deleteForm = deleteResource @Form
+
+createForm :: Identifier Form -> Identifier Prototype -> String -> MAS Form
+createForm name prototype description = createResource @Form $ object [ "name" .= name, "prototype" .= prototype, "description" .= description ]

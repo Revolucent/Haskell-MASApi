@@ -33,8 +33,8 @@ type Namespace = Entity NamespaceExtra
 listNamespaces = listResource @Namespace
 getNamespace = getResource @Namespace
 
-createNamespace :: Identifier Namespace -> MAS Namespace
-createNamespace name = createResource $ object [ "name" .= name ]
+createNamespace :: Identifier Namespace -> String -> MAS Namespace
+createNamespace name description = createResource $ object [ "name" .= name, "description" .= description ] 
 
 modifyNamespace :: Identifier Namespace -> String -> MAS Namespace
 modifyNamespace name rename = modifyResource name $ object [ "rename" .= rename ]

@@ -42,9 +42,6 @@ import Vendita.MAS.Core
 class Resource a where
     type Identifier a :: *
     resourceIdentifier :: a -> Identifier a
-    resourceUserOwner :: a -> String
-    resourceDateCreated :: a -> MASTime
-    resourceDateUpdated :: a -> MASTime
     resourcePathSegment :: Text 
     resourceOptions :: Option 'Https
     resourceOptions = defaultPageSize <> defaultResponseTimeout

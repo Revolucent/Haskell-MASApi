@@ -51,9 +51,34 @@ source-repository     head
 
 library
   hs-source-dirs:     src/lib
-  build-depends:      base >=4.11 && <5, req, uri, aeson, aeson-pretty, bytestring, containers, split, data-default-class, hashable, monad-control, mtl, text, uuid, time, unordered-containers, http-client, http-types, regex-tdfa, exceptions, time, iso8601-time
+  build-depends:      base >=4.11 && <5, 
+                      aeson, 
+                      aeson-pretty, 
+                      bytestring,
+                      containers, 
+                      data-default-class, 
+                      directory,
+                      exceptions,
+                      filepath,
+                      hashable,
+                      http-client,
+                      http-types,
+                      iso8601-time,
+                      monad-control,
+                      mtl,
+                      regex-tdfa,
+                      req, 
+                      split, 
+                      text,
+                      time,
+                      unordered-containers,
+                      uri, 
+                      utf8-string,
+                      uuid,
+                      yaml
   exposed-modules:    Vendita.MAS, Vendita.MAS.Diagnostics
-  other-modules:      Vendita.MAS.Core,
+  other-modules:      Vendita.MAS.Config, 
+                      Vendita.MAS.Core,
                       Vendita.MAS.Entity,
                       Vendita.MAS.Entity.Account,
                       Vendita.MAS.Entity.Alias,
@@ -79,7 +104,7 @@ library
 executable MAS 
   main-is:             Main.hs
   other-modules:       Config
-  build-depends:       base >=4.11 && <5, req, http-client, containers, split, vendita-masapi, aeson, bytestring, text, mtl, cond, uuid, unordered-containers, random, exceptions, aeson-pretty, transformers, time, iso8601-time, concurrent-extra, unbounded-delays
+  build-depends:       base >=4.11 && <5, req, http-client, containers, split, vendita-masapi, aeson, bytestring, text, mtl, cond, uuid, unordered-containers, random, exceptions, aeson-pretty, transformers, time, iso8601-time, concurrent-extra, unbounded-delays, utf8-string, yaml, directory, filepath
   hs-source-dirs:      src/bin
   default-language:    Haskell2010
 

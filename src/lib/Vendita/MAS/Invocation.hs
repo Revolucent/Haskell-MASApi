@@ -58,9 +58,6 @@ data Invocation = Invocation {
 instance Resource Invocation where
     type Identifier Invocation = UUID
     resourceIdentifier = invocationUUID
-    resourceUserOwner = invocationUserOwner
-    resourceDateCreated = invocationDateCreated
-    resourceDateUpdated = invocationDateUpdated
     resourcePathSegment = "invocation"
 
 instance FromJSON Invocation where
