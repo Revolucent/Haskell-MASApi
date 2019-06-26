@@ -6,7 +6,7 @@ import Data.Text (pack)
 import Vendita.MAS.Core
 import Vendita.MAS.Resource
 
-data Class = ACCOUNT | ALIAS | CONSTANT | EXCEPTION | FORM | NAMESPACE | PROCESS | PROTOTYPE | SCHEDULE | TYPE deriving (Eq, Ord, Enum, Read, Show)
+data Class = NOTHING | ACCOUNT | ALIAS | CONSTANT | EXCEPTION | FORM | NAMESPACE | PROCESS | PROTOTYPE | SCHEDULE | TYPE deriving (Eq, Ord, Enum, Read, Show)
 
 instance EnumerationKey Class 
 

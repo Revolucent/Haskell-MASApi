@@ -6,8 +6,11 @@ module Vendita.MAS (
     module Vendita.MAS.Entity.Alias,
     module Vendita.MAS.Entity.Class,
     module Vendita.MAS.Entity.Constant,
+    module Vendita.MAS.Entity.Entities,
     module Vendita.MAS.Entity.Exception,
+    module Vendita.MAS.Entity.Extra,
     module Vendita.MAS.Entity.Form,
+    module Vendita.MAS.Entity.Generic,
     module Vendita.MAS.Entity.Meta,
     module Vendita.MAS.Entity.Namespace,
     module Vendita.MAS.Entity.Process,
@@ -30,8 +33,11 @@ import Vendita.MAS.Entity.Account
 import Vendita.MAS.Entity.Alias
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Constant
+import Vendita.MAS.Entity.Entities
 import Vendita.MAS.Entity.Exception
+import Vendita.MAS.Entity.Extra
 import Vendita.MAS.Entity.Form
+import Vendita.MAS.Entity.Generic
 import Vendita.MAS.Entity.Meta
 import Vendita.MAS.Entity.Namespace
 import Vendita.MAS.Entity.Process

@@ -1,40 +1,30 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
+import Control.Applicative (liftA2)
 import Control.Monad
 import Control.Monad.IO.Class
-import Data.List (nub)
+import Data.Aeson
+import Data.ByteString.Char8 (pack) 
+import Data.List (group, nub, sort)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
 import qualified Data.Set as Set
+import Data.Set (Set)
 import Text.Printf
 import Vendita.MAS
 import Vendita.MAS.Diagnostics
 
-taggedMaybe :: Tagger (Maybe a) (Maybe String)
-taggedMaybe mas name = do 
-    result <- mas
-    return $ result >>= return . const name
+-- mas.sys.invocation.notify.create
 
-taggedPositive :: Tagger [a] (Maybe String)
-taggedPositive mas name = do
-    result <- mas
-    if (length result) > 0
-        then return $ Just name
-        else return Nothing
-
-taggedNegative :: Tagger [a] (Maybe String)
-taggedNegative mas name = do
-    result <- mas
-    if (length result) == 0
-        then return $ Just name
-        else return Nothing
-
-main = catMaybes 
-    <$> withActiveConfiguredServers 
-        (taggedNegative 
-             $  filter (entityName %== "ventoso.") 
-            <$> listProcesses False) 
-    >>= mapM putStrLn 
+main = withActiveConfiguredServers_ $ \name -> do 
+    let process = "mas.sys.invocation.notify.create"
+    whenExists (getProcess process) (const $ liftIO $ putStrLn name) 

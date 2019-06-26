@@ -31,6 +31,9 @@ module Vendita.MAS.Core
     envelopeFirst,
     filterNulls,
     first,
+    fromMaybe404,
+    fromMaybeHttpException,
+    fromMaybeHttpStatus,
     get,
     get_,
     handleHttp404,
@@ -56,6 +59,7 @@ module Vendita.MAS.Core
     put_,
     raw,
     toMASTime,
+    whenExists,
     when404,
     when404_,
     withConnection,
@@ -69,7 +73,7 @@ module Vendita.MAS.Core
 )
 where
 
-import Control.Applicative (empty, liftA2)
+import Control.Applicative (empty, liftA2, (<|>))
 import Control.Exception.Base (Exception, throwIO)
 import qualified Control.Exception.Base as E
 import Control.Monad (void)
@@ -77,7 +81,9 @@ import Control.Monad.Catch
 import Control.Monad.Fail (MonadFail)
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
-import Control.Monad.Reader
+import Control.Monad.Reader hiding (lift)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Maybe (runMaybeT, MaybeT(..))
 import Data.Aeson
 import Data.Aeson.Types (Pair, Parser, toJSONKeyText, typeMismatch)
 import Data.ByteString (ByteString)
@@ -86,7 +92,7 @@ import Data.Hashable (Hashable)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Text (Text, pack, isInfixOf, strip, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time
@@ -101,7 +107,7 @@ import qualified Network.HTTP.Client as L
 import Network.HTTP.Req hiding (handleHttpException)
 import qualified Network.HTTP.Req as Req 
 import System.IO.Unsafe (unsafePerformIO)
-import Text.Read hiding (get, String)
+import Text.Read hiding (get, String, lift)
 import Text.Printf
 
 newtype MASTime = MASTime { utcTime :: UTCTime } deriving (Eq, Ord)
@@ -232,17 +238,29 @@ handleHttp404JustReturn = handleHttp404 . return
 maybeHttpStatus :: (Foldable t, MonadCatch m) => t T.Status -> m a -> m (Maybe a)
 maybeHttpStatus statuses attempt = catch (Just <$> attempt) (handleHttpStatusJustReturn statuses Nothing)
 
+fromMaybeHttpStatus :: (Foldable t, MonadCatch m) => a -> t T.Status -> m a -> m a
+fromMaybeHttpStatus deflt statuses attempt = fromMaybe deflt <$> maybeHttpStatus statuses attempt
+
 maybe404 :: (MonadCatch m) => m a -> m (Maybe a)
 maybe404 = maybeHttpStatus [T.status404]
 
+fromMaybe404 :: (MonadCatch m) => a -> m a -> m a
+fromMaybe404 deflt attempt = fromMaybe deflt <$> maybe404 attempt
+
 maybeHttpException :: (MonadCatch m) => m a -> m (Maybe a)
 maybeHttpException attempt = catch (Just <$> attempt) (handleHttpExceptionJustReturn Nothing)
+
+fromMaybeHttpException :: (MonadCatch m) => a -> m a -> m a
+fromMaybeHttpException deflt attempt = fromMaybe deflt <$> maybeHttpException attempt
 
 when404 :: (MonadCatch m) => m a -> m a -> m a
 when404 attempt failure = catch attempt (handleHttp404 failure)
 
 when404_ :: (MonadCatch m) => m a -> m b -> m ()
 when404_ attempt failure = catch (void attempt) (handleHttp404 (void failure))
+
+whenExists :: (MonadCatch m) => m a -> (a -> m ()) -> m () 
+whenExists attempt action = void $ runMaybeT $ (MaybeT $ maybe404 attempt) >>= lift . action 
 
 second :: Int
 second = 1000000
@@ -265,7 +283,7 @@ list makeRequest = do
         then return contents
         else (contents ++) <$> combinePages [2..pageCount]
     where
-        combinePages [] = return []
+        combinePages [] = pure []
         combinePages (p:ps) = liftA2 (++) (envelopeContents <$> withPage p makeRequest) (combinePages ps)
 
 fail404 :: (MonadFail f) => f a

@@ -9,25 +9,25 @@ server: &server
 servers:
   mas3cloud10:
     <<: *server
-    domain: mas3cloud10.somewhere.com
+    domain: mas3cloud10.venditamas.com
   mas3cloud11:
     <<: *server
-    domain: mas3cloud11.somewhere.com
+    domain: mas3cloud11.venditamas.com
   mas3cloud12:
     <<: *server
-    domain: mas3cloud12.somewhere.com
+    domain: mas3cloud12.venditamas.com
   mas3cloud13:
     <<: *server
-    domain: mas3cloud13.somewhere.com
+    domain: mas3cloud13.venditamas.com
   mas3cloud14:
     <<: *server
-    domain: mas3cloud14.somewhere.com
+    domain: mas3cloud14.venditamas.com
   mas3cloud15:
     <<: *server
-    domain: mas3cloud15.somewhere.com
+    domain: mas3cloud15.venditamas.com
   mas3cloud17:
     <<: *server
-    domain: mas3cloud17.somewhere.com
+    domain: mas3cloud17.venditamas.com
 
 # Add or remove named servers here.
 actives:

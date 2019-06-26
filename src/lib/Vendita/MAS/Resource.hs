@@ -77,7 +77,7 @@ getResource :: forall r. (Resource r, FromJSON r, Pathed (Identifier r)) => Iden
 getResource identifier = fmap envelopeFirst $ withResource @r $ withIdentifier identifier get
 
 getResourceRaw :: forall r v. (Resource r, FromJSON v, Pathed (Identifier r)) => Identifier r -> MAS v
-getResourceRaw identifier = withResource @r $ withIdentifier identifier $ get
+getResourceRaw identifier = fmap envelopeFirst $ withResource @r $ withIdentifier identifier $ get
 
 withAll :: (MonadReader Connection m) => Bool -> m a -> m a
 withAll unsummarized m = if unsummarized then withPath "*" m else m

@@ -7,7 +7,9 @@
 
 module Vendita.MAS.Entity (
     Entity(..),
-    EntityResource(..)
+    EntityResource(..),
+    getEntityRaw,
+    listEntityRaw
 ) 
 where
 
@@ -62,3 +64,9 @@ parseEntity value = parseObject value
 
 instance (FromJSON x, Extra x) => FromJSON (Entity x) where
     parseJSON = parseEntity 
+
+listEntityRaw :: forall r e x. (Extra x, r ~ (Entity x), FromJSON e) => Bool -> MAS [e]
+listEntityRaw unsummarized = listResourceRaw @r @e unsummarized 
+
+getEntityRaw :: forall r e x. (Extra x, r ~ (Entity x), FromJSON e) => Identifier r -> MAS e
+getEntityRaw = getResourceRaw @r @e
