@@ -106,7 +106,10 @@ monitor process parameters = monitor' $ Invoke process parameters
             invocation <- getInvocation uuid
             let printInvocation = liftIO $ print invocation
             case invocationStatus invocation of
-                SUCCEEDED -> printInvocation 
+                SUCCEEDED -> do 
+                    printInvocation 
+                    text <- getInvocationOutputText uuid
+                    liftIO $ printf "OUTPUT:\n%s\n" text
                 KILLED -> printInvocation
                 FAILED -> printInvocation
                 _ -> monitor' m

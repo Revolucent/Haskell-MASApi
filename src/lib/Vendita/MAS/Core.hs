@@ -73,7 +73,7 @@ module Vendita.MAS.Core
 )
 where
 
-import Control.Applicative (empty, liftA2, (<|>))
+import Control.Applicative (Alternative, empty, liftA2, (<|>))
 import Control.Exception.Base (Exception, throwIO)
 import qualified Control.Exception.Base as E
 import Control.Monad (void)
@@ -181,6 +181,14 @@ askServer = do
 instance MonadHttp MAS where
     handleHttpException = throwM 
 
+instance MonadPlus MAS where
+    mzero = liftIO mzero
+    mplus m1 m2 = catch m1 (\(e :: SomeException) -> m2)
+
+instance Alternative MAS where
+    empty = mzero 
+    (<|>) = mplus
+
 withConnection :: (MonadIO m) => Connection -> MAS a -> m a
 withConnection connection (MAS m) = liftIO $ runReaderT m connection
 
@@ -253,14 +261,16 @@ maybeHttpException attempt = catch (Just <$> attempt) (handleHttpExceptionJustRe
 fromMaybeHttpException :: (MonadCatch m) => a -> m a -> m a
 fromMaybeHttpException deflt attempt = fromMaybe deflt <$> maybeHttpException attempt
 
+infixl 3 `when404`
+
 when404 :: (MonadCatch m) => m a -> m a -> m a
 when404 attempt failure = catch attempt (handleHttp404 failure)
 
 when404_ :: (MonadCatch m) => m a -> m b -> m ()
 when404_ attempt failure = catch (void attempt) (handleHttp404 (void failure))
 
-whenExists :: (MonadCatch m) => m a -> (a -> m ()) -> m () 
-whenExists attempt action = void $ runMaybeT $ (MaybeT $ maybe404 attempt) >>= lift . action 
+whenExists :: (MonadCatch m) => m a -> (a -> m b) -> m () 
+whenExists attempt action = void $ runMaybeT $ (MaybeT $ maybe404 attempt) >>= lift . void . action 
 
 second :: Int
 second = 1000000

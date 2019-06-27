@@ -8,23 +8,27 @@
 
 module Main where
 
-import Control.Applicative (liftA2)
+import Control.Applicative (empty, liftA2, (<|>))
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.ByteString.Char8 (pack) 
-import Data.List (group, nub, sort)
+import Data.List (group, nub, sortOn)
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
-import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing)
+import Data.Maybe (catMaybes, fromMaybe, fromJust, isJust, isNothing)
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Data.UUID as UUID 
+import Data.UUID (UUID)
 import Text.Printf
 import Vendita.MAS
 import Vendita.MAS.Diagnostics
 
--- mas.sys.invocation.notify.create
-
 main = withActiveConfiguredServers_ $ \name -> do 
-    let process = "mas.sys.invocation.notify.create"
-    whenExists (getProcess process) (const $ liftIO $ putStrLn name) 
+    liftIO $ putStrLn name
+    (getProcess "ventoso.foo" `when404` getProcess "mas.sys.invocation.notify.create") >>= liftIO . putStrLn . entityName
+
+    

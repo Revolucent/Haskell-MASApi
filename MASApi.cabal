@@ -80,6 +80,7 @@ library
   exposed-modules:    Vendita.MAS, Vendita.MAS.Diagnostics
   other-modules:      Vendita.MAS.Config, 
                       Vendita.MAS.Core,
+                      Vendita.MAS.Daemon,
                       Vendita.MAS.Entity,
                       Vendita.MAS.Entity.Account,
                       Vendita.MAS.Entity.Alias,

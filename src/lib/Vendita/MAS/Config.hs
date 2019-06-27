@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
 module Vendita.MAS.Config (
@@ -13,6 +14,7 @@ module Vendita.MAS.Config (
     countTimeTagged,
     defaultConfigFileName,
     defaultConfigFilePath,
+    exceptionTagged,
     mapTagged,
     mapTaggedSet,
     readConfig,
@@ -37,7 +39,7 @@ import Control.Applicative
 import Control.Exception (Exception)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Catch (MonadThrow, throwM)
+import Control.Monad.Catch (MonadThrow, catch, throwM)
 import Data.Aeson
 import qualified Data.ByteString as BS
 import Data.List ((!!))
@@ -50,6 +52,7 @@ import Data.Map (Map)
 import Data.Set (Set)
 import Data.Typeable (Typeable)
 import GHC.Generics
+import Network.HTTP.Req (HttpException)
 import System.Environment
 import System.FilePath
 import Vendita.MAS.Core
@@ -162,3 +165,8 @@ countTimeTagged :: Tagger [a] (String, Int, NominalDiffTime)
 countTimeTagged mas name = do
     (result, diff) <- time mas
     return (name, length result, diff)
+
+exceptionTagged :: Tagger a (String, Maybe HttpException)
+exceptionTagged mas name = do
+    e <- catch (mas >> return Nothing) (\(e :: HttpException) -> return $ Just e)
+    return (name, e)

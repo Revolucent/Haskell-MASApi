@@ -11,6 +11,8 @@ module Vendita.MAS.Invocation (
     InvocationParameters(..),
     InvocationStatus(..),
     getInvocation,
+    getInvocationOutputs,
+    getInvocationOutputText,
     invoke,
     invokeNow,
     listInvocations,
@@ -27,7 +29,7 @@ import Data.Aeson
 import Data.Aeson.Types
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Text
+import Data.Text hiding (concat, map)
 import Data.Time
 import Data.Time.Clock
 import Data.UUID
@@ -70,6 +72,16 @@ instance FromJSON Invocation where
         invocationDateCreated <- o .: "date_created"
         invocationDateUpdated <- o .: "date_updated"
         return Invocation{..}
+
+data InvocationOutput = InvocationOutput {
+    invocationOutputText :: String
+}  deriving (Show)
+
+instance FromJSON InvocationOutput where
+    parseJSON = withObject "output" $ \o -> do
+        info <- o .: "data"
+        invocationOutputText <- info .: "text"
+        return InvocationOutput{..}
 
 withInvocationDateRange :: (MonadReader Connection m) => Day -> Integer -> m a -> m a
 withInvocationDateRange day period m = do
@@ -115,3 +127,9 @@ invoke process parameters timestamp = fmap envelopeFirst $ withResource @Invocat
     ]
 
 invokeNow process parameters = invoke process parameters Nothing
+
+getInvocationOutputs :: Identifier Invocation -> MAS [InvocationOutput]
+getInvocationOutputs uuid = withEndpoint @Invocation $ withIdentifier uuid $ withPath "display" $ list get
+
+getInvocationOutputText :: Identifier Invocation -> MAS String
+getInvocationOutputText uuid = concat . map invocationOutputText <$> getInvocationOutputs uuid 
