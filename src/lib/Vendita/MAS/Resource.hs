@@ -31,6 +31,7 @@ module Vendita.MAS.Resource (
 ) where
 
 import Control.Monad.Reader
+import Data.Ord
 import Data.Aeson
 import Data.Aeson.Types (Pair)
 import Data.List.Split
@@ -73,26 +74,33 @@ attributesToObject = object . map (\a -> (attributeName a) .= (toJSON a))
 withIdentifier :: (MonadReader Connection m, Pathed i) => i -> m a -> m a
 withIdentifier = withPath . pathSegment 
 
-getResource :: forall r. (Resource r, FromJSON r, Pathed (Identifier r)) => Identifier r -> MAS r
-getResource identifier = fmap envelopeFirst $ withResource @r $ withIdentifier identifier get
-
 getResourceRaw :: forall r v. (Resource r, FromJSON v, Pathed (Identifier r)) => Identifier r -> MAS v
 getResourceRaw identifier = fmap envelopeFirst $ withResource @r $ withIdentifier identifier $ get
+
+getResource :: forall r. (Resource r, FromJSON r, Pathed (Identifier r)) => Identifier r -> MAS r
+getResource = getResourceRaw @r
 
 withAll :: (MonadReader Connection m) => Bool -> m a -> m a
 withAll unsummarized m = if unsummarized then withPath "*" m else m
 
-listResource :: forall r. (Resource r, FromJSON r) => Bool -> MAS [r]
-listResource unsummarized = withResource @r $ withAll unsummarized $ list get
-
 listResourceRaw :: forall r v. (Resource r, FromJSON v) => Bool -> MAS [v]
 listResourceRaw unsummarized = withResource @r $ withAll unsummarized $ list get 
 
+listResource :: forall r. (Resource r, FromJSON r) => Bool -> MAS [r]
+-- listResource unsummarized = withResource @r $ withAll unsummarized $ list get
+listResource = listResourceRaw @r
+
+createResourceRaw :: forall r v j. (Resource r, FromJSON v, ToJSON j) => j -> MAS v
+createResourceRaw definition = envelopeFirst <$> withEndpoint @r (post definition)
+
 createResource :: forall r j. (Resource r, FromJSON r, ToJSON j) => j -> MAS r 
-createResource definition = fmap envelopeFirst $ withEndpoint @r $ post definition 
+createResource = createResourceRaw @r
+
+modifyResourceRaw :: forall r v j. (Resource r, FromJSON v, Pathed (Identifier r), ToJSON j) => Identifier r -> j -> MAS v
+modifyResourceRaw name modification = envelopeFirst <$> withEndpoint @r (withIdentifier name $ patch modification)
 
 modifyResource :: forall r j. (Resource r, FromJSON r, Pathed (Identifier r), ToJSON j) => Identifier r -> j -> MAS r
-modifyResource name modification = fmap envelopeFirst $ withEndpoint @r $ withIdentifier name $ patch modification
+modifyResource = modifyResourceRaw @r 
 
 modifyResourceAttributes :: forall r a. (Resource r, FromJSON r, Pathed (Identifier r), NamedAttribute a) => Identifier r -> [a] -> MAS r
 modifyResourceAttributes name attributes = modifyResource name $ attributesToObject attributes

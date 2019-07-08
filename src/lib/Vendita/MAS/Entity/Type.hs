@@ -4,6 +4,7 @@
 module Vendita.MAS.Entity.Type (
     TypeExtra(..),
     Type,
+    getType,
     listTypes
 )
 
@@ -38,3 +39,6 @@ type Type = Entity TypeExtra
 
 listTypes :: Bool -> MAS [Type]
 listTypes = listResource
+
+getType :: Identifier Type -> MAS Type
+getType = getResource

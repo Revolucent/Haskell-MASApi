@@ -5,23 +5,15 @@
 {-# LANGUAGE TupleSections #-}
 
 module Vendita.MAS.Config (
+    Config(..),
     NamedServersException(..),
     Tagger,
     allTagged,
-    allTaggedSet,
-    countMapTagged,
-    countTagged,
-    countTimeTagged,
     defaultConfigFileName,
     defaultConfigFilePath,
-    exceptionTagged,
-    mapTagged,
-    mapTaggedSet,
     readConfig,
     readDefaultConfig,
     tagged,
-    taggedSet,
-    timeTagged,
     withActiveConfiguredServers,
     withActiveConfiguredServers_,
     withConfiguredServer,
@@ -36,10 +28,12 @@ module Vendita.MAS.Config (
 where
 
 import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.MVar
 import Control.Exception (Exception)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Catch (MonadThrow, catch, throwM)
+import Control.Monad.Catch (MonadThrow, SomeException, catch, throwM)
 import Data.Aeson
 import qualified Data.ByteString as BS
 import Data.List ((!!))
@@ -83,90 +77,63 @@ readConfig path = BS.readFile path >>= Yaml.decodeThrow
 readDefaultConfig :: IO Config
 readDefaultConfig = defaultConfigFilePath >>= readConfig 
 
-withNamedServers :: (MonadIO m, MonadThrow m) => Map String Server -> (String -> MAS a) -> m [a]
-withNamedServers servers mas 
+runConcurrent :: (MonadIO m) => IO a -> m (MVar (Either SomeException a)) 
+runConcurrent io = liftIO $ do 
+    var <- newEmptyMVar
+    forkFinally io (putMVar var)
+    return var
+
+withNamedServers :: (MonadIO m, MonadThrow m) => Bool -> Map String Server -> (String -> MAS a) -> m [a]
+withNamedServers concurrent servers mas 
     | Map.size servers == 0 = throwM NoNamedServersException
+    | concurrent = do
+        vars <- sequence $ map (\(name, server) -> runConcurrent (withServer server (mas name))) (Map.assocs servers)
+        forM vars $ \var -> do
+            result <- liftIO $ takeMVar var
+            case result of
+                Left e -> throwM e
+                Right a -> return a
     | otherwise = sequence $ map (\(name, server) -> withServer server (mas name)) (Map.assocs servers)
 
 withNamedServers_ :: (MonadIO m, MonadThrow m) => Map String Server -> (String -> MAS a) -> m ()
-withNamedServers_ servers mas = void $ withNamedServers servers mas 
+withNamedServers_ servers mas = void $ withNamedServers False servers mas 
 
-withSelectedNamedServers :: (MonadIO m, MonadThrow m) => Map String Server -> Set String -> (String -> MAS a) -> m [a]
-withSelectedNamedServers servers selected mas 
+withSelectedNamedServers :: (MonadIO m, MonadThrow m) => Bool -> Map String Server -> Set String -> (String -> MAS a) -> m [a]
+withSelectedNamedServers concurrent servers selected mas 
     | Set.size invalidServerNames > 0 = throwM $ InvalidNamedServersException invalidServerNames 
-    | otherwise = withNamedServers (Map.restrictKeys servers selected) mas
+    | otherwise = withNamedServers concurrent (Map.restrictKeys servers selected) mas
     where
         invalidServerNames = Set.difference selected (Map.keysSet servers)
 
 withSelectedNamedServers_ :: (MonadIO m, MonadThrow m) => Map String Server -> Set String -> (String -> MAS a) -> m () 
-withSelectedNamedServers_ servers selected mas = void $ withSelectedNamedServers servers selected mas 
+withSelectedNamedServers_ servers selected mas = void $ withSelectedNamedServers False servers selected mas 
 
-withSelectedConfiguredServers :: (MonadIO m, MonadThrow m) => Set String -> (String -> MAS a) -> m [a]
-withSelectedConfiguredServers selected mas = do 
+withSelectedConfiguredServers :: (MonadIO m, MonadThrow m) => Bool -> Set String -> (String -> MAS a) -> m [a]
+withSelectedConfiguredServers concurrent selected mas = do 
     config <- liftIO readDefaultConfig 
-    withSelectedNamedServers (configServers config) selected mas
+    withSelectedNamedServers concurrent (configServers config) selected mas
 
 withSelectedConfiguredServers_ :: (MonadIO m, MonadThrow m) => Set String -> (String -> MAS a) -> m ()
-withSelectedConfiguredServers_ selected mas = void $ withSelectedConfiguredServers selected mas
+withSelectedConfiguredServers_ selected mas = void $ withSelectedConfiguredServers False selected mas
 
 withConfiguredServer :: (MonadIO m, MonadThrow m) => String -> MAS a -> m a
-withConfiguredServer name mas = (!! 0) <$> withSelectedConfiguredServers (Set.singleton name) (const mas)
+withConfiguredServer name mas = (!! 0) <$> withSelectedConfiguredServers False (Set.singleton name) (const mas)
 
 withConfiguredServer_ :: (MonadIO m, MonadThrow m) => String -> MAS a -> m ()
 withConfiguredServer_ name mas = void $ withConfiguredServer name mas
 
-withActiveConfiguredServers :: (MonadIO m, MonadThrow m) => (String -> MAS a) -> m [a] 
-withActiveConfiguredServers mas = do
+withActiveConfiguredServers :: (MonadIO m, MonadThrow m) => Bool -> (String -> MAS a) -> m [a] 
+withActiveConfiguredServers concurrent mas = do
     config <- liftIO readDefaultConfig 
-    withSelectedNamedServers (configServers config) (configActives config) mas
+    withSelectedNamedServers concurrent (configServers config) (configActives config) mas
 
 withActiveConfiguredServers_ :: (MonadIO m, MonadThrow m) => (String -> MAS a) -> m ()
-withActiveConfiguredServers_ mas = void $ withActiveConfiguredServers mas
+withActiveConfiguredServers_ mas = void $ withActiveConfiguredServers False mas
 
 type Tagger a b = MAS a -> String -> MAS b
 
-allTagged :: Tagger [a] [(String, a)]
-allTagged mas name = map (name,) <$> mas
-
-taggedSet :: Ord a => Tagger [a] (String, Set a)
-taggedSet mas name = (name,) . Set.fromList <$> mas
-
-mapTaggedSet :: Ord a => Tagger [a] (Map String (Set a))
-mapTaggedSet mas name = Map.singleton name . Set.fromList <$> mas
-
-allTaggedSet :: Ord a => Tagger [a] (Set (String, a))
-allTaggedSet mas name = Set.fromList . map (name,) <$> mas
+allTagged :: (Functor f) => Tagger (f a) (f (String, a)) 
+allTagged mas name = fmap (name,) <$> mas
 
 tagged :: Tagger a (String, a)
 tagged mas name = (name,) <$> mas
-
-mapTagged :: Tagger a (Map String a)
-mapTagged mas name = Map.singleton name <$> mas 
-
-countTagged :: Tagger [a] (String, Int)
-countTagged mas name = (name,) . length <$> mas 
-
-countMapTagged :: Tagger [a] (Map String Int)
-countMapTagged mas name = Map.singleton name . length <$> mas
-
-time :: MAS a -> MAS (a, NominalDiffTime)
-time action = do
-    start <- liftIO getCurrentTime
-    result <- action
-    end <- liftIO getCurrentTime
-    return $ (result, diffUTCTime end start)
-
-timeTagged :: Tagger a (String, NominalDiffTime)
-timeTagged mas name = do 
-    (_, diff) <- time mas
-    return (name, diff)
-
-countTimeTagged :: Tagger [a] (String, Int, NominalDiffTime)
-countTimeTagged mas name = do
-    (result, diff) <- time mas
-    return (name, length result, diff)
-
-exceptionTagged :: Tagger a (String, Maybe HttpException)
-exceptionTagged mas name = do
-    e <- catch (mas >> return Nothing) (\(e :: HttpException) -> return $ Just e)
-    return (name, e)

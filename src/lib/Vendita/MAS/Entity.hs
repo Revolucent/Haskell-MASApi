@@ -15,6 +15,7 @@ where
 
 import Data.Aeson
 import Data.Aeson.Types (Parser)
+import Data.Ord
 import Data.Text (unpack)
 import Vendita.MAS.Core
 import Vendita.MAS.Entity.Class
@@ -46,6 +47,12 @@ instance (Extra x) => Resource (Entity x) where
     type Identifier (Entity x) = String
     resourceIdentifier = entityName
     resourcePathSegment = extraPathSegment @x
+
+instance Eq (Entity x) where
+    a == b = (entityName a) == (entityName b)
+
+instance Ord (Entity x) where
+    compare = comparing entityName
 
 parseEntity :: forall x. (FromJSON x, Extra x) => Value -> Parser (Entity x)
 parseEntity value = parseObject value

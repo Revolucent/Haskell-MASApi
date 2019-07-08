@@ -9,13 +9,15 @@ module Vendita.MAS.Diagnostics (
     entityHas,
     maybeCmp,
     maybeCmpBy,
-    monitor,
     pairs,
     printPretty,
+    watch,
     (%==),
     (*=%=),
+    (*==%),
     (*===),
     (=%=),
+    (==%),
     (===)
 ) where
 
@@ -52,6 +54,8 @@ infix 4 *=%=
 infix 4 *===
 infix 4 =%=
 infix 4 ===
+infix 4 ==%
+infix 4 *==%
 
 cmpBy :: (a -> a) -> (a -> a -> Bool) -> (e -> a) -> a -> e -> Bool
 cmpBy transform op = 
@@ -82,6 +86,12 @@ cmp = cmpBy id
 (%==) :: Eq a => (e -> [a]) -> [a] -> e -> Bool
 (%==) = cmp (flip isPrefixOf)
 
+(==%) :: Eq a => (e -> [a]) -> [a] -> e -> Bool
+(==%) = cmp (flip isSuffixOf)
+
+(*==%) :: Eq a => (e -> Maybe [a]) -> [a] -> e -> Bool
+(*==%) = maybeCmp (flip isSuffixOf)
+
 -- E.g., filter (entityHas processParameters (processParameterName === "foo"))
 entityHas :: (Foldable t, Extra x) => (x -> t a) -> (a -> Bool) -> Entity x -> Bool 
 entityHas getElems test = any test . getElems . entityExtra 
@@ -90,14 +100,14 @@ data InvocationMonitoringState = Invoke (Identifier Process) InvocationParameter
 
 second :: Int = 1000000
 
-monitor :: Identifier Process -> InvocationParameters -> MAS ()
-monitor process parameters = monitor' $ Invoke process parameters
+watch :: Identifier Process -> InvocationParameters -> MAS ()
+watch process parameters = watch' $ Invoke process parameters
     where
-        monitor' :: InvocationMonitoringState -> MAS ()
-        monitor' (Invoke process parameters) = do
+        watch' :: InvocationMonitoringState -> MAS ()
+        watch' (Invoke process parameters) = do
             uuid <- fmap invocationUUID $ invokeNow process parameters
-            monitor' $ Monitor uuid
-        monitor' m@(Monitor uuid) = do
+            watch' $ Monitor uuid
+        watch' m@(Monitor uuid) = do
             -- Check every three seconds
             let delay = 3
             liftIO $ do
@@ -112,7 +122,7 @@ monitor process parameters = monitor' $ Invoke process parameters
                     liftIO $ printf "OUTPUT:\n%s\n" text
                 KILLED -> printInvocation
                 FAILED -> printInvocation
-                _ -> monitor' m
+                _ -> watch' m
 
 allp :: [a -> Bool] -> a -> Bool
 allp [] _ = True

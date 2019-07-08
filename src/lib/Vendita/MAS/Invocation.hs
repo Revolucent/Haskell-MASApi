@@ -8,27 +8,38 @@
 
 module Vendita.MAS.Invocation (
     Invocation(..),
-    InvocationParameters(..),
+    InvocationParameters,
     InvocationStatus(..),
+    abortPollingAfter,
     getInvocation,
     getInvocationOutputs,
     getInvocationOutputText,
     invoke,
     invokeNow,
+    isInvocationComplete,
+    isInvocationIncomplete,
     listInvocations,
     listInvocationsWithRange,
     parameter,
     parameterS,
+    poll,
+    pollNow,
     withInvocationDateRange,
-    withInvocationRange
+    withInvocationRange,
+    (=#),
+    (=$),
+    (=$$)
 )
 where
 
+import Control.Concurrent
 import Control.Monad.Reader
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Ord
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.Maybe (fromMaybe)
 import Data.Text hiding (concat, map)
 import Data.Time
 import Data.Time.Clock
@@ -50,7 +61,9 @@ instance FromJSON InvocationStatus where
 data Invocation = Invocation {
     invocationUUID :: UUID,
     invocationProcess :: Identifier Process,
+    invocationDateInvoked :: MASTime,
     invocationStatus :: InvocationStatus,
+    invocationErrors :: [String],
     invocationParameters :: Object,
     invocationUserOwner :: String,
     invocationDateCreated :: MASTime,
@@ -66,12 +79,26 @@ instance FromJSON Invocation where
     parseJSON = withObject "invocation" $ \o -> do
         invocationUUID <- o .: "uuid"
         invocationProcess <- o .: "process"
+        invocationDateInvoked <- o .: "date_invoke"
         invocationStatus <- o .: "status"
+        invocationErrors <- fromMaybe [] <$> o .:? "errors"
         invocationParameters <- o .: "parameters"
         invocationUserOwner <- o .: "user_owner"
         invocationDateCreated <- o .: "date_created"
         invocationDateUpdated <- o .: "date_updated"
         return Invocation{..}
+
+instance Eq Invocation where
+    a == b = (invocationUUID a) == (invocationUUID b)
+
+instance Ord Invocation where
+    compare = comparing invocationUUID
+
+isInvocationIncomplete :: Invocation -> Bool
+isInvocationIncomplete invocation = (invocationStatus invocation) `elem` [DELAYED, EXECUTING, SCHEDULED]
+
+isInvocationComplete :: Invocation -> Bool
+isInvocationComplete = not . isInvocationIncomplete 
 
 data InvocationOutput = InvocationOutput {
     invocationOutputText :: String
@@ -93,20 +120,24 @@ withInvocationRange back forth m = do
     start <- liftIO $ fmap (addDays (-back) . utctDay) getCurrentTime
     withInvocationDateRange start (back + forth) m
 
-data InvocationParameters = InvocationParameters (Map String Value) deriving (Show)
+type InvocationParameters = Map String Value
 
-instance Semigroup InvocationParameters where
-    (InvocationParameters a) <> (InvocationParameters b) = InvocationParameters (a <> b)
+infixr 8 =# 
 
-instance Monoid InvocationParameters where
-    mappend (InvocationParameters a) (InvocationParameters b) = InvocationParameters (mappend a b) 
-    mempty = InvocationParameters mempty
-
-instance ToJSON InvocationParameters where
-    toJSON (InvocationParameters parameters) = toJSON parameters
+(=#) :: (ToJSON v) => String -> v -> InvocationParameters
+name =# value = Map.singleton name $ toJSON value
 
 parameter :: (ToJSON v) => String -> v -> InvocationParameters
-parameter name value = InvocationParameters (Map.fromList [(name, toJSON value)])
+parameter name value = Map.singleton name $ toJSON value 
+
+infixr 8 =$
+infixr 8 =$$
+
+(=$) :: String -> String -> InvocationParameters 
+(=$) = (=#)
+
+(=$$) :: String -> [String] -> InvocationParameters
+(=$$) = (=#)
 
 parameterS :: String -> String -> InvocationParameters
 parameterS = parameter
@@ -127,6 +158,32 @@ invoke process parameters timestamp = fmap envelopeFirst $ withResource @Invocat
     ]
 
 invokeNow process parameters = invoke process parameters Nothing
+
+abortPollingAfter :: Integer -> UTCTime -> Invocation -> MAS Bool
+abortPollingAfter seconds date = \_ -> do
+    now <- liftIO getCurrentTime
+    let diff = now `diffUTCTime` date
+    return $ diff < (realToFrac seconds)
+
+poll :: Identifier Process -> InvocationParameters -> Maybe UTCTime -> Maybe (UTCTime -> Invocation -> MAS Bool) -> MAS Invocation 
+poll name parameters maybeWhen maybeCallback = do
+    start <- liftIO getCurrentTime
+    invoke name parameters maybeWhen >>= poll' start
+    where
+        poll' :: UTCTime -> Invocation -> MAS Invocation 
+        poll' start invocation
+            | isInvocationIncomplete invocation = do
+                continue <- callback start invocation
+                if continue 
+                    then do
+                        liftIO $ threadDelay 2500000 -- Pause for 2.5 seconds
+                        getInvocation (invocationUUID invocation) >>= poll' start
+                    else return invocation
+            | otherwise = return invocation
+        callback = fromMaybe (\_ _ -> return True) maybeCallback
+
+pollNow :: Identifier Process -> InvocationParameters -> Maybe (UTCTime -> Invocation -> MAS Bool) -> MAS Invocation
+pollNow name parameters maybeCallback = poll name parameters Nothing maybeCallback
 
 getInvocationOutputs :: Identifier Invocation -> MAS [InvocationOutput]
 getInvocationOutputs uuid = withEndpoint @Invocation $ withIdentifier uuid $ withPath "display" $ list get

@@ -30,7 +30,6 @@ module Vendita.MAS.Core
     delete_,
     envelopeFirst,
     filterNulls,
-    first,
     fromMaybe404,
     fromMaybeHttpException,
     fromMaybeHttpStatus,
@@ -43,8 +42,8 @@ module Vendita.MAS.Core
     handleHttpStatus,
     handleHttpStatusJustReturn,
     list,
-    mapServer,
-    mapServers,
+--    mapServer,
+--    mapServers,
     mas,
     mas_,
     maybe404,
@@ -62,6 +61,7 @@ module Vendita.MAS.Core
     whenExists,
     when404,
     when404_,
+    withAuth,
     withConnection,
     withEnumeration,
     withOption,
@@ -69,7 +69,7 @@ module Vendita.MAS.Core
     withPageSize,
     withPath,
     withServer,
-    withServers
+--    withServers
 )
 where
 
@@ -87,12 +87,14 @@ import Control.Monad.Trans.Maybe (runMaybeT, MaybeT(..))
 import Data.Aeson
 import Data.Aeson.Types (Pair, Parser, toJSONKeyText, typeMismatch)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as BS
 import Data.Char (toLower, toUpper)
 import Data.Hashable (Hashable)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust, fromJust, fromMaybe)
+import Data.Semigroup hiding (Option)
 import Data.Text (Text, pack, isInfixOf, strip, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time
@@ -189,6 +191,12 @@ instance Alternative MAS where
     empty = mzero 
     (<|>) = mplus
 
+instance Semigroup a => Semigroup (MAS a) where
+    (<>) = liftA2 (<>) 
+
+instance Monoid a => Monoid (MAS a) where
+    mempty = return mempty
+
 withConnection :: (MonadIO m) => Connection -> MAS a -> m a
 withConnection connection (MAS m) = liftIO $ runReaderT m connection
 
@@ -198,14 +206,11 @@ withServer server m = do
     let auth = basicAuth (serverUser server) (serverPassword server)
     withConnection (server, serverUrl server, (accept <> auth)) m
 
-withServers :: (MonadIO m, Traversable t) => t Server -> MAS a -> m (t a) 
-withServers servers m = forM servers ((flip withServer) m) 
-
-mapServer :: (MonadIO m) => MAS a -> Server -> m a
-mapServer = flip withServer
-
-mapServers :: (MonadIO m, Traversable t) => MAS a -> t Server -> m (t a) 
-mapServers action = mapM (mapServer action)
+withAuth :: String -> String -> MAS a -> MAS a 
+withAuth username password mas = do  
+    server <- askServer
+    let newServer = server { serverUser = BS.pack username, serverPassword = BS.pack password }
+    withServer newServer mas
 
 data Envelope a = Envelope { envelopeContents :: [a], envelopePageCount :: Int, envelopePage :: Int } deriving (Show)
 
@@ -295,18 +300,6 @@ list makeRequest = do
     where
         combinePages [] = pure []
         combinePages (p:ps) = liftA2 (++) (envelopeContents <$> withPage p makeRequest) (combinePages ps)
-
-fail404 :: (MonadFail f) => f a
-fail404 = Fail.fail "NOT FOUND"
-
-first :: (MonadFail f) => MAS (Envelope a) -> MAS (f a)
-first makeRequest = openRequest `catch` (handleHttp404JustReturn fail404)
-    where
-        openRequest = do
-            contents <- envelopeContents <$> makeRequest
-            if (length contents) == 0
-                then return fail404
-                else return $ return (contents !! 0)
 
 envelopeFirst :: Envelope a -> a
 envelopeFirst envelope = let contents = envelopeContents envelope in contents !! 0
