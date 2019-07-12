@@ -32,7 +32,7 @@ import Vendita.MAS.Strings
 data ScheduleAttributeTime
 instance ScheduleAttribute ScheduleAttributeTime
 
-data ScheduleTime e = ScheduleTimeMin | ScheduleTimeHour deriving (Enum) 
+data ScheduleTime e = ScheduleTimeMin | ScheduleTimeHour | ScheduleTimeDay | ScheduleTimeMonth | ScheduleTimeWeekday deriving (Enum) 
 
 instance (ScheduleAttribute e) => AttributeKey (ScheduleTime e) where
     type AttributeValue (ScheduleTime e) = String
@@ -41,10 +41,16 @@ instance (ScheduleAttribute e) => AttributeKey (ScheduleTime e) where
 instance Show (ScheduleTime e) where
     show ScheduleTimeMin = "t_min"
     show ScheduleTimeHour = "t_hr"
+    show ScheduleTimeDay = "t_day"
+    show ScheduleTimeMonth = "t_mon"
+    show ScheduleTimeWeekday = "t_wkd"
 
 instance ToText (ScheduleTime e) where
     toText ScheduleTimeMin = "t_min"
     toText ScheduleTimeHour = "t_hr"
+    toText ScheduleTimeDay = "t_day"
+    toText ScheduleTimeMonth = "t_mon"
+    toText ScheduleTimeWeekday = "t_wkd"
 
 instance Eq (ScheduleTime e) where
     a == b = (toText a) == (toText b)

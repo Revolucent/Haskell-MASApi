@@ -5,8 +5,11 @@
 module Vendita.MAS.Entity.Schedule.Attributes (
     parameters,
     process,
+    t_day,
     t_hr,
-    t_min
+    t_min,
+    t_mon,
+    t_wkd
 )
 where
 
@@ -43,3 +46,12 @@ t_min = ScheduleTimeMin
 
 t_hr :: forall e. ScheduleAttribute e => ScheduleTime e
 t_hr = ScheduleTimeHour
+
+t_day :: forall e. ScheduleAttribute e => ScheduleTime e
+t_day = ScheduleTimeDay
+
+t_mon :: forall e. ScheduleAttribute e => ScheduleTime e
+t_mon = ScheduleTimeMonth
+
+t_wkd :: forall e. ScheduleAttribute e => ScheduleTime e
+t_wkd = ScheduleTimeWeekday

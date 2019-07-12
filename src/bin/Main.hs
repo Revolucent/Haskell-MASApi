@@ -45,5 +45,5 @@ import Vendita.MAS.Entity.Schedule.Attributes
 import Vendita.MAS.Diagnostics
 
 main = withConfiguredServer "mas3cloud17" $ do
-    createSchedule "watusi" "watusi" "mas.sys.namespace.exists" ("fqname" =$ "ventoso") (t_hr =: "*/3")
+    deleteSchedule "mas0000.user.mas.schedule.watusi"
     listSchedules False >>= liftIO . print
