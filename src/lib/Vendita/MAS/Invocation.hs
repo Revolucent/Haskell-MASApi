@@ -10,7 +10,7 @@ module Vendita.MAS.Invocation (
     Invocation(..),
     InvocationParameters,
     InvocationStatus(..),
-    abortPollingAfter,
+    defaultPollingStrategy,
     getInvocation,
     getInvocationOutputs,
     getInvocationOutputText,
@@ -20,10 +20,12 @@ module Vendita.MAS.Invocation (
     isInvocationIncomplete,
     listInvocations,
     listInvocationsWithRange,
+    makePollingStrategy,
+    noPollingCallback,
     parameter,
     parameterS,
     poll,
-    pollNow,
+    pollDefault,
     withInvocationDateRange,
     withInvocationRange,
     (=#),
@@ -159,34 +161,38 @@ invoke process parameters timestamp = fmap envelopeFirst $ withResource @Invocat
 
 invokeNow process parameters = invoke process parameters Nothing
 
-abortPollingAfter :: Integer -> UTCTime -> Invocation -> MAS Bool
-abortPollingAfter seconds date = \_ -> do
-    now <- liftIO getCurrentTime
-    let diff = now `diffUTCTime` date
-    return $ diff < (realToFrac seconds)
-
-poll :: Identifier Process -> InvocationParameters -> Maybe UTCTime -> Maybe (UTCTime -> Invocation -> MAS Bool) -> MAS Invocation 
-poll name parameters maybeWhen maybeCallback = do
-    start <- liftIO getCurrentTime
-    invoke name parameters maybeWhen >>= poll' start
-    where
-        poll' :: UTCTime -> Invocation -> MAS Invocation 
-        poll' start invocation
-            | isInvocationIncomplete invocation = do
-                continue <- callback start invocation
-                if continue 
-                    then do
-                        liftIO $ threadDelay 2500000 -- Pause for 2.5 seconds
-                        getInvocation (invocationUUID invocation) >>= poll' start
-                    else return invocation
-            | otherwise = return invocation
-        callback = fromMaybe (\_ _ -> return True) maybeCallback
-
-pollNow :: Identifier Process -> InvocationParameters -> Maybe (UTCTime -> Invocation -> MAS Bool) -> MAS Invocation
-pollNow name parameters maybeCallback = poll name parameters Nothing maybeCallback
-
 getInvocationOutputs :: Identifier Invocation -> MAS [InvocationOutput]
 getInvocationOutputs uuid = withEndpoint @Invocation $ withIdentifier uuid $ withPath "display" $ list get
 
 getInvocationOutputText :: Identifier Invocation -> MAS String
 getInvocationOutputText uuid = concat . map invocationOutputText <$> getInvocationOutputs uuid 
+
+makePollingStrategy :: NominalDiffTime -> NominalDiffTime -> Invocation -> UTCTime -> Maybe NominalDiffTime
+makePollingStrategy defaultInterval defaultTimeout invocation now = do
+    let diff = now `diffUTCTime` (utcTime $ invocationDateInvoked invocation)
+    if diff >= defaultTimeout
+        then Nothing -- Abort!
+        else if isInvocationComplete invocation
+            then Nothing 
+            else Just defaultInterval
+
+defaultPollingStrategy = makePollingStrategy 2.5 240
+
+noPollingCallback :: Invocation -> MAS ()
+noPollingCallback _ = return () 
+
+poll :: (Invocation -> UTCTime -> Maybe NominalDiffTime) -> (Invocation -> MAS ()) -> Invocation -> MAS Invocation
+poll pollingStrategy callback invocation = do
+    callback invocation
+    now <- liftIO getCurrentTime
+    let maybeInterval = pollingStrategy invocation now
+    case maybeInterval of
+        Nothing -> return invocation
+        Just interval -> do 
+            liftIO $ do
+                let seconds = fromRational $ toRational interval
+                liftIO $ print seconds
+                threadDelay $ round $ (1000000 * seconds)
+            getInvocation (invocationUUID invocation) >>= poll pollingStrategy callback
+
+pollDefault = poll defaultPollingStrategy noPollingCallback

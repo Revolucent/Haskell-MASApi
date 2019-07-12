@@ -20,6 +20,7 @@ import Data.Text (unpack)
 import Vendita.MAS.Core
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Extra
+import Vendita.MAS.Entity.Internal.Types
 import Vendita.MAS.Resource
 import Vendita.MAS.Security.Privilege
 
@@ -40,9 +41,6 @@ data Entity x = Entity {
 instance (Extra x) => EntityResource (Entity x) where
     entityResourceClass = extraEntityClass @x
 
-instance NamedResource (Entity x) where
-    resourceName = entityName
-
 instance (Extra x) => Resource (Entity x) where
     type Identifier (Entity x) = String
     resourceIdentifier = entityName
@@ -53,6 +51,8 @@ instance Eq (Entity x) where
 
 instance Ord (Entity x) where
     compare = comparing entityName
+
+instance EntityAttribute (Entity x)
 
 parseEntity :: forall x. (FromJSON x, Extra x) => Value -> Parser (Entity x)
 parseEntity value = parseObject value

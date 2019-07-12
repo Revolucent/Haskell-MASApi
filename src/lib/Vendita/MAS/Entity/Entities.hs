@@ -29,7 +29,6 @@ import Vendita.MAS.Entity.Form
 import Vendita.MAS.Entity.Generic
 import Vendita.MAS.Entity.Process
 import Vendita.MAS.Entity.Prototype
-import Vendita.MAS.Entity.Schedule
 import Vendita.MAS.Entity.Type
 import Vendita.MAS.Resource
 
@@ -63,7 +62,6 @@ listEntities unsummarized = foldr1 (liftA2 (++)) [
         listEntityRaw @Form unsummarized,
         listEntityRaw @Process unsummarized,
         listEntityRaw @Prototype unsummarized,
-        listEntityRaw @Schedule unsummarized,
         listEntityRaw @Type unsummarized
     ]
 

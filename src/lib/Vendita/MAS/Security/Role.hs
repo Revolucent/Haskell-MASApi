@@ -27,9 +27,8 @@ import Vendita.MAS.Core
 import Vendita.MAS.Resource
 import Vendita.MAS.Security.Privilege
 
-class (NamedResource r) => Role r where
+class Resource r => Role r where
     roleName :: r -> String
-    roleName = resourceName
     roleNamespace :: r -> String
     roleIsGroup :: Bool
 
@@ -48,10 +47,8 @@ instance Resource User where
     resourceIdentifier = userName
     resourcePathSegment = "user"
 
-instance NamedResource User where
-    resourceName = userName
-
 instance Role User where
+    roleName = userName
     roleNamespace = userNamespace
     roleIsGroup = False
 
@@ -100,10 +97,8 @@ instance Resource Group where
     resourceIdentifier = groupName
     resourcePathSegment = "group"
 
-instance NamedResource Group where
-    resourceName = groupName
-
 instance Role Group where
+    roleName = groupName
     roleNamespace = groupNamespace
     roleIsGroup = True
 

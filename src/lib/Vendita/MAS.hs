@@ -1,4 +1,5 @@
 module Vendita.MAS (
+    module Vendita.MAS.Common,
     module Vendita.MAS.Config,
     module Vendita.MAS.Core,
     module Vendita.MAS.Daemon,
@@ -16,17 +17,19 @@ module Vendita.MAS (
     module Vendita.MAS.Entity.Namespace,
     module Vendita.MAS.Entity.Process,
     module Vendita.MAS.Entity.Prototype,
-    module Vendita.MAS.Entity.Schedule,
     module Vendita.MAS.Entity.Type,
+    module Vendita.MAS.Entity.Schedule,
     module Vendita.MAS.Invocation,
     module Vendita.MAS.Protocol,
     module Vendita.MAS.Resource,
     module Vendita.MAS.Security,
     module Vendita.MAS.Security.Privilege,
-    module Vendita.MAS.Security.Role
+    module Vendita.MAS.Security.Role,
+    module Vendita.MAS.Strings
 ) 
 where
 
+import Vendita.MAS.Common
 import Vendita.MAS.Config
 import Vendita.MAS.Core
 import Vendita.MAS.Daemon
@@ -52,3 +55,4 @@ import Vendita.MAS.Resource
 import Vendita.MAS.Security
 import Vendita.MAS.Security.Privilege
 import Vendita.MAS.Security.Role
+import Vendita.MAS.Strings

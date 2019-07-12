@@ -6,7 +6,6 @@
 
 module Vendita.MAS.Entity.Account (
     Account,
-    AccountAttribute(..),
     AccountExtra(..),
     AccountExtraSpecial(..),
     NewAccount(..),
@@ -30,6 +29,7 @@ import Data.Set (Set)
 import Text.Printf (printf)
 import Vendita.MAS.Core
 import Vendita.MAS.Entity
+import Vendita.MAS.Entity.Attributes hiding ((.=))
 import Vendita.MAS.Entity.Class
 import Vendita.MAS.Entity.Extra
 import Vendita.MAS.Resource
@@ -78,35 +78,6 @@ type Account = Entity AccountExtra
 getAccount = getResource @Account
 listAccounts = listResource @Account
 
-data AccountAttribute = AccountRename String | 
-                        AccountDescription String | 
-                        AccountProtocol String | 
-                        AccountUserKey String |
-                        AccountUser String |  
-                        AccountAddress String |
-                        AccountPort Int |
-                        AccountSpecial AccountExtraSpecial
-
-instance NamedAttribute AccountAttribute where 
-    attributeName (AccountRename _) = "rename"
-    attributeName (AccountDescription _) = "description"
-    attributeName (AccountProtocol _) = "protocol"
-    attributeName (AccountUserKey _) = "user_key"
-    attributeName (AccountUser _) = "user"
-    attributeName (AccountAddress _) = "address"
-    attributeName (AccountPort _) = "port"
-    attributeName (AccountSpecial _) = "special"
-
-instance ToJSON AccountAttribute where
-    toJSON (AccountRename rename) = toJSON rename
-    toJSON (AccountDescription description) = toJSON description
-    toJSON (AccountProtocol protocol) = toJSON protocol
-    toJSON (AccountUserKey userKey) = toJSON userKey
-    toJSON (AccountUser user) = toJSON user
-    toJSON (AccountAddress address) = toJSON address
-    toJSON (AccountPort port) = toJSON port
-    toJSON (AccountSpecial special) = toJSON special
-
 data NewAccount = NewAccount {
     newAccountName :: String,
     newAccountDescription :: String,
@@ -133,10 +104,10 @@ instance ToJSON NewAccount where
 createAccount :: NewAccount -> MAS Account
 createAccount account = createResource account
 
-modifyAccount :: Identifier Account -> [AccountAttribute] -> MAS Account
-modifyAccount = modifyResourceAttributes
-
 deleteAccount = deleteResource @Account
+
+modifyAccount :: Identifier Account -> Attributes Account -> MAS Account
+modifyAccount name attributes = modifyResource name (object $ toPairs attributes)
 
 accountURL :: Account -> String
 accountURL = accountExtraURL . entityExtra 
