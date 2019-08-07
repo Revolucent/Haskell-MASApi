@@ -28,6 +28,7 @@ module Vendita.MAS.Invocation (
     pollDefault,
     withInvocationDateRange,
     withInvocationRange,
+    withInvocationTimeRange,
     (=#),
     (=$),
     (=$$)
@@ -112,6 +113,11 @@ instance FromJSON InvocationOutput where
         invocationOutputText <- info .: "text"
         return InvocationOutput{..}
 
+withInvocationTimeRange :: (MonadReader Connection m) => UTCTime -> Integer -> m a -> m a
+withInvocationTimeRange time period m = do
+    let start = formatTime defaultTimeLocale "%FT%T" time
+    withOption ("date_invoke" =: start) $ withOption ("period" =: period) m
+
 withInvocationDateRange :: (MonadReader Connection m) => Day -> Integer -> m a -> m a
 withInvocationDateRange day period m = do
     let start = formatTime defaultTimeLocale "%F" day
@@ -191,7 +197,6 @@ poll pollingStrategy callback invocation = do
         Just interval -> do 
             liftIO $ do
                 let seconds = fromRational $ toRational interval
-                liftIO $ print seconds
                 threadDelay $ round $ (1000000 * seconds)
             getInvocation (invocationUUID invocation) >>= poll pollingStrategy callback
 

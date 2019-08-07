@@ -185,7 +185,7 @@ instance MonadHttp MAS where
 
 instance MonadPlus MAS where
     mzero = liftIO mzero
-    mplus m1 m2 = catch m1 (\(e :: SomeException) -> m2)
+    mplus m1 m2 = catch m1 (\(e :: HttpException) -> m2)
 
 instance Alternative MAS where
     empty = mzero 

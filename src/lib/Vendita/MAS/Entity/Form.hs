@@ -29,6 +29,7 @@ data FormValue = FormValue {
     formValueName :: String,
     formValueDescription :: String,
     formValueType :: String,
+    formValueValue :: Value,
     formValueIsRepeatable :: Bool,
     formValueIsGrouped :: Bool,
     formValueGroupLast :: Maybe Int,
@@ -46,6 +47,7 @@ instance FromJSON FormValue where
         formValueName <- o .: "name"
         formValueDescription <- o .: "description"
         formValueType <- o .: "data_type"
+        formValueValue <- o .: "value"
         formValueIsRepeatable <- o .: "is_repeatable"
         formValueIsGrouped <- o .: "is_grouped"
         formValueGroupLast <- o .: "group_last"

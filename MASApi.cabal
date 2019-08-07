@@ -83,6 +83,8 @@ library
                       Vendita.MAS.Diagnostics,
                       Vendita.MAS.Entity.Attributes,
                       Vendita.MAS.Entity.Account.Attributes,
+                      Vendita.MAS.Entity.Constant.Attributes,
+                      Vendita.MAS.Entity.Exception.Attributes,
                       Vendita.MAS.Entity.Schedule.Attributes
   other-modules:      Vendita.MAS.Common,
                       Vendita.MAS.Config, 
@@ -117,7 +119,7 @@ library
 
 executable MAS 
   main-is:             Main.hs
-  build-depends:       base >=4.11 && <5, req, http-client, http-types, containers, split, vendita-masapi, aeson, bytestring, text, mtl, cond, uuid, unordered-containers, random, exceptions, aeson-pretty, transformers, time, iso8601-time, concurrent-extra, unbounded-delays, utf8-string, yaml, directory, filepath, monad-par
+  build-depends:       base >=4.11 && <5, req, http-client, http-types, vector, containers, split, vendita-masapi, aeson, bytestring, text, mtl, cond, uuid, unordered-containers, random, exceptions, aeson-pretty, transformers, time, iso8601-time, concurrent-extra, unbounded-delays, utf8-string, yaml, directory, filepath, monad-par
   hs-source-dirs:      src/bin
   default-language:    Haskell2010
 
